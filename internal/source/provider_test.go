@@ -126,3 +126,13 @@ func TestMalformedConfigFallsBackToDefaults(t *testing.T) {
 		t.Errorf("table = %v, want the defaults", Config())
 	}
 }
+
+func TestDecodeFlatProviderSpan(t *testing.T) {
+	batch := DecodeAny([]byte(`{"traceId":"demo","spanId":"root","name":"Rewrite the renderer","service":"codex","session":"demo","startUnixNano":"1788278400000000000","endUnixNano":"1788278408000000000"}`))
+	if len(batch.Spans) != 1 {
+		t.Fatalf("spans = %d, want 1", len(batch.Spans))
+	}
+	if batch.Spans[0].Session != "demo" || batch.Spans[0].Service != "codex" {
+		t.Fatalf("span = %#v", batch.Spans[0])
+	}
+}

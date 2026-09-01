@@ -23,7 +23,6 @@ import (
 	"github.com/charmbracelet/x/ansi"
 	"github.com/muesli/termenv"
 
-	"github.com/roshbhatia/go-utils/diffview"
 	"github.com/roshbhatia/traces/internal/otlp"
 	"github.com/roshbhatia/traces/internal/session"
 )
@@ -233,9 +232,10 @@ type Model struct {
 	tab  string
 	spin spinner.Model
 
-	pane viewport.Model
-	md   *glamour.TermRenderer
-	mdW  int
+	pane  viewport.Model
+	md    *glamour.TermRenderer
+	mdW   int
+	diffs *diffRenderer
 
 	paneKey     string
 	paneSelect  string
@@ -281,6 +281,7 @@ func New(store *session.Store, pinned, source string) Model {
 		split:  50,
 		pane:   viewport.New(52, 20),
 		spin:   spinner.New(spinner.WithSpinner(spinner.MiniDot), spinner.WithStyle(live)),
+		diffs:  newDiffRenderer(),
 		now:    time.Now(),
 	}
 	m.reload()
@@ -2089,11 +2090,15 @@ func (m Model) changesSize(r row) int {
 
 func (m Model) tabChanges(r row) string {
 	patch, more := limitedText(patchOf(r), m.inspectorLimit())
-	files := diffview.Parse(normalizePatch(patch))
-	if len(files) == 0 {
+	patch = normalizePatch(patch)
+	if !strings.Contains(patch, "@@") {
 		return ""
 	}
-	out := diffview.Render(diffview.Options{Files: files, Width: m.pane.Width})
+	renderer := m.diffs
+	if renderer == nil {
+		renderer = newDiffRenderer()
+	}
+	out := renderer.render(patch, m.pane.Width)
 	if more > 0 {
 		out += "\n" + faint.Render(fmt.Sprintf("%s more; scroll down to load it", byteSize(more)))
 	}
@@ -2101,7 +2106,7 @@ func (m Model) tabChanges(r row) string {
 }
 
 func normalizePatch(patch string) string {
-	if len(diffview.Parse(patch)) > 0 || !strings.Contains(patch, "@@") {
+	if strings.Contains(patch, "--- ") || !strings.Contains(patch, "@@") {
 		return patch
 	}
 	b := &strings.Builder{}

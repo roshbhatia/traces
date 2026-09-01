@@ -43,9 +43,19 @@
           pkgs = nixpkgs.legacyPackages.${system};
           traces = pkgs.buildGoModule {
             pname = "traces";
-            version = "0.1.0";
+            version = "0.2.0";
             src = ./.;
-            vendorHash = "sha256-mTSsvqp38HrXRsT4KCHQW5l2rfUJD0vtuOPZWpv/49g=";
+            vendorHash = "sha256-aWLUPzUTpAgFlnTxBXfmwEAE1SAMjk+Kj7XrcpLLKs8=";
+            nativeBuildInputs = [ pkgs.installShellFiles ];
+            postInstall = ''
+              installShellCompletion \
+                --cmd traces \
+                --bash <("$out/bin/traces" completion bash) \
+                --fish <("$out/bin/traces" completion fish) \
+                --zsh <("$out/bin/traces" completion zsh)
+              mkdir -p "$out/share/nushell/vendor/autoload"
+              "$out/bin/traces" completion nu > "$out/share/nushell/vendor/autoload/traces.nu"
+            '';
             meta = {
               description = "Inspect local agent activity as a folding trace tree";
               homepage = "https://github.com/roshbhatia/traces";
@@ -86,6 +96,10 @@
               pkgs.go-tools
               pkgs.goreleaser
               pkgs.ripgrep
+              pkgs.charm-freeze
+              pkgs.fish
+              pkgs.nushell
+              pkgs.shfmt
             ];
             shellHook = ''
               export GOTOOLCHAIN=local

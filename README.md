@@ -17,10 +17,20 @@ configuration. This keeps private telemetry queries outside this repository.
 
 The key help, leader bar, and footer render from one binding registry.
 
+Set `TRACES_DIFF_PROVIDER=changes` to render change panes through Changes. The
+provider receives a patch on standard input through its `render` subcommand.
+Traces caches each rendered patch by provider, width, and content.
+
+Generate shell completions with `traces completion bash`, `zsh`, `fish`, or
+`nu`.
+
 ## Development
 
 ```bash
 nix develop
 go test -race ./...
 nix flake check
+./hack/screenshots.sh
 ```
+
+![Traces tree view](docs/traces.png)

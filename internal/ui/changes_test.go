@@ -1,6 +1,8 @@
 package ui
 
 import (
+	"os"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"testing"
@@ -19,6 +21,29 @@ func TestChangesTabRendersEditOutput(t *testing.T) {
 	out := model.tabChanges(row{label: "Edit", node: &session.Node{Output: patch}})
 	if !strings.Contains(out, "file.go") || !strings.Contains(out, "+1") || !strings.Contains(out, "-1") {
 		t.Fatalf("changes tab = %q", out)
+	}
+}
+
+func TestDiffProviderCachesByContentAndWidth(t *testing.T) {
+	dir := t.TempDir()
+	counter := filepath.Join(dir, "calls")
+	provider := filepath.Join(dir, "provider")
+	script := "#!/bin/sh\nprintf x >> \"" + counter + "\"\ncat >/dev/null\nprintf 'provider view\\n'\n"
+	if err := os.WriteFile(provider, []byte(script), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv(diffProviderEnv, provider)
+	renderer := newDiffRenderer()
+	patch := "--- a/file.go\n+++ b/file.go\n@@ -1 +1 @@\n-old\n+new\n"
+	if first, second := renderer.render(patch, 80), renderer.render(patch, 80); first != second || first != "provider view" {
+		t.Fatalf("renders = %q and %q", first, second)
+	}
+	calls, err := os.ReadFile(counter)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(calls) != "x" {
+		t.Fatalf("provider calls = %q, want one", calls)
 	}
 }
 

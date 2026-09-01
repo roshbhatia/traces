@@ -23,6 +23,7 @@ import (
 	"github.com/charmbracelet/lipgloss"
 	"github.com/muesli/termenv"
 
+	"github.com/roshbhatia/go-utils/completion"
 	"github.com/roshbhatia/go-utils/paths"
 	"github.com/roshbhatia/traces/internal/attach"
 	"github.com/roshbhatia/traces/internal/otlp"
@@ -32,6 +33,10 @@ import (
 )
 
 func main() {
+	if len(os.Args) > 1 && os.Args[1] == "completion" {
+		generateCompletion(os.Args[2:])
+		return
+	}
 	file := flag.String("file", "", "OTLP JSON file to read (default: the collector's)")
 	pinned := flag.String("session", "", "attach to this session, by id or prefix")
 	list := flag.Bool("list", false, "list the sessions and exit")
@@ -100,6 +105,36 @@ func main() {
 		os.Exit(src.report(which, scope, directory, *list, *asJSON))
 	}
 	os.Exit(src.watch(which, scope, directory))
+}
+
+func generateCompletion(args []string) {
+	if len(args) != 1 {
+		fmt.Fprintln(os.Stderr, "traces: completion requires bash, zsh, fish, or nu")
+		os.Exit(1)
+	}
+	out, err := completion.Generate(args[0], completion.Command{
+		Name:        "traces",
+		Description: "Inspect agent activity as a trace tree",
+		Flags: []completion.Flag{
+			{Name: "all", Description: "Show every local run"},
+			{Name: "color", Description: "Color output", Value: true, Values: []string{"auto", "always", "never"}},
+			{Name: "file", Description: "Read an OTLP JSON file", Value: true},
+			{Name: "json", Description: "Print newline-delimited JSON"},
+			{Name: "lag", Description: "Provider overlap window", Value: true},
+			{Name: "list", Description: "List sessions"},
+			{Name: "once", Description: "Print one trace tree"},
+			{Name: "poll", Description: "Provider poll interval", Value: true},
+			{Name: "provider", Description: "Read named activity providers", Value: true},
+			{Name: "service", Description: "Filter by service", Value: true},
+			{Name: "session", Description: "Attach by session ID or prefix", Value: true},
+			{Name: "since", Description: "Initial provider window", Value: true},
+		},
+	})
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "traces: %v\n", err)
+		os.Exit(1)
+	}
+	fmt.Println(out)
 }
 
 // attached names the run to open. A flag wins, then the session this process
@@ -180,7 +215,11 @@ func (s sources) read() (otlp.Batch, error) {
 		}
 		return source.DecodeAny(blob), nil
 	}
-	return otlp.ReadAll(s.path)
+	blob, err := os.ReadFile(s.path)
+	if err != nil {
+		return otlp.Batch{}, err
+	}
+	return source.DecodeAny(blob), nil
 }
 
 // keep drops the services the reader did not ask for. A prefix matches, because
