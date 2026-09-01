@@ -209,9 +209,9 @@ func TestNarrowFooterKeepsFocusAndHelpHints(t *testing.T) {
 	if !strings.Contains(footer, "ctrl+k trace") || !strings.Contains(footer, "? help") {
 		t.Fatalf("narrow inspector footer = %q", footer)
 	}
-	for _, entry := range helpTable {
-		if entry[0] == "gg / G" && !strings.Contains(entry[1], "focused pane") {
-			t.Fatalf("end-motion help = %q", entry[1])
+	for _, binding := range helpBindings() {
+		if binding.id == "ends" && !strings.Contains(binding.description, "focused pane") {
+			t.Fatalf("end-motion help = %q", binding.description)
 		}
 	}
 }

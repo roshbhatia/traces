@@ -2903,74 +2903,38 @@ func (m Model) footer() string {
 				requirement = "9 rows"
 			}
 		}
-		return fit(dim.Render("up down trace   inspector needs "+requirement+"   ? help"), m.width)
+		return fit(dim.Render("up down trace   inspector needs "+requirement+"   "+bindingHint("help")), m.width)
 	}
 	if m.width < 100 {
 		if m.onPane() {
-			return fit(title.Render("inspector")+dim.Render("  ctrl+k trace  ? help  j/k line"), m.width)
+			return fit(title.Render("inspector")+dim.Render("  "+bindingHints("focus-trace", "help", "line")), m.width)
 		}
-		return fit(title.Render("trace")+dim.Render("  ctrl+j inspector  ? help  j/k row"), m.width)
+		return fit(title.Render("trace")+dim.Render("  "+bindingHints("focus-inspector", "help", "line")), m.width)
 	}
 	if m.onPane() {
 		hint := title.Render("inspector") +
-			dim.Render("   j k line   ctrl+d u page   gg G ends   ctrl+k trace   tab pane   ? help")
+			dim.Render("   "+bindingHints("line", "page", "ends", "focus-trace", "tab", "help"))
 		return fit(hint, m.width)
 	}
 	hint := title.Render("trace") +
-		dim.Render("   j k row   ctrl+d u page   { } turn   v range   V turn   m subtree   "+
-			"d u inspector   ctrl+j inspector   / filter   : command   ? help")
+		dim.Render("   "+bindingHints("line", "page", "turn", "visual", "mark-turn", "mark-subtree", "inspect-page", "focus-inspector", "filter", "command", "help"))
 	return fit(hint, m.width)
 }
 
 func (m Model) leaderBar() string {
-	keys := []string{"f follow", "o anchor", "t timeline", "s session", "a all", "m one row", "i inspector", "y yank raw", "? help"}
-	if m.pending == "i" {
-		keys = []string{"i toggle", "h left", "j bottom", "k top", "l right"}
-	}
-	return fit(accent.Render("<space>")+dim.Render("  "+strings.Join(keys, "   ")), m.width)
-}
-
-var helpTable = [][2]string{
-	{"ctrl+j / ctrl+k", "focus the inspector / focus the trace"},
-	{"j / k", "one line in the focused pane  (the arrows do the same)"},
-	{"ctrl+d / ctrl+u", "half page the focused pane  (ctrl+f and ctrl+b page it whole)"},
-	{"d / u", "half page the inspector without moving the focus"},
-	{"ctrl+e / ctrl+y", "scroll the inspector one line, cursor unmoved"},
-	{"gg / G", "start / end of the focused pane  (trace G resumes follow)"},
-	{"H / M / L", "cursor to the top, middle or bottom of the view"},
-	{"{ / }", "previous turn / next turn  ([t and ]t also work)"},
-	{"n / N", "next row / previous row of the current filter"},
-	{"/", "filter the tree by text  (esc clears it)"},
-	{"h / l", "collapse or step out / expand"},
-	{"za / zo / zc", "toggle, open or close the fold under the cursor"},
-	{"zR / zM", "open every fold / close every fold"},
-	{"zx", "close all, then open the path to the cursor"},
-	{"v", "range: up down extend, enter or v keep, esc cancel"},
-	{"V / enter", "toggle the whole turn the cursor sits in"},
-	{"m", "toggle the row and its whole subtree"},
-	{"esc", "cancel a range, or clear every mark"},
-	{"Y", "yank the row's whole text to the clipboard"},
-	{"e", "open the row's whole text in $EDITOR"},
-	{"tab / shift+tab", "next inspector tab / previous"},
-	{"- / =", "move the divider  (dragging it does the same)"},
-	{"click / wheel", "select a row, fold on the wedge, pick a tab, scroll either pane"},
-	{"<space> t", "timeline: draw each row's span beside it"},
-	{"<space> i", "inspector: i toggle, h left, j bottom, k top, l right"},
-	{"<space>", "leader: f follow, o anchor, s session, a all, m one row, e edit, y yank, ? help"},
-	{":", "command line: :w <path>, :turn 40, :set notimeline, :session <id>"},
-	{"ZZ / q", "quit"},
+	return fit(accent.Render("<space>")+dim.Render("  "+leaderHints(m.pending == "i")), m.width)
 }
 
 func helpLines(width int) []string {
 	keyWidth := min(18, max(8, width/3))
 	descriptionWidth := max(1, width-keyWidth)
 	lines := []string{}
-	for _, h := range helpTable {
-		wrapped := wrapTo(h[1], descriptionWidth)
+	for _, binding := range helpBindings() {
+		wrapped := wrapTo(binding.description, descriptionWidth)
 		for i, line := range wrapped {
 			key := ""
 			if i == 0 {
-				key = h[0]
+				key = binding.keys
 			}
 			lines = append(lines, accent.Render(fit(key, keyWidth))+plain.Render(line))
 		}
