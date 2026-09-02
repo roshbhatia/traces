@@ -52,7 +52,7 @@
               pname = name;
               inherit version;
               src = ./.;
-              vendorHash = "sha256-SY6o7kaHBn0k221+q/GdsYa+iJ/NIldkl9y+Klh4Ztc=";
+              vendorHash = "sha256-XbtymSIvJS5Wacp21A64087YALL+JhU28++HAS6albE=";
               subPackages = [ subPackage ];
               nativeBuildInputs = pkgs.lib.optionals completions [
                 pkgs.gitMinimal
