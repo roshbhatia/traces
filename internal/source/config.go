@@ -13,6 +13,7 @@ import (
 type Manifest struct {
 	Command      []string `json:"command" yaml:"command" jsonschema:"required,minItems=1"`
 	Capabilities []string `json:"capabilities" yaml:"capabilities" jsonschema:"required,minItems=1"`
+	Description  string   `json:"description,omitempty" yaml:"description"`
 }
 
 // Diff configures a Git-compatible difftool command.

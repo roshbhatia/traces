@@ -8,11 +8,13 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"flag"
 	"fmt"
 	"io"
 	"os"
 	"path/filepath"
+	"slices"
 	"strconv"
 	"strings"
 	"sync"
@@ -38,6 +40,10 @@ func main() {
 	}
 	if len(os.Args) > 1 && os.Args[1] == "generate" {
 		runGenerate(os.Args[2:])
+		return
+	}
+	if len(os.Args) > 1 && os.Args[1] == "provider" {
+		runProvider(os.Args[2:])
 		return
 	}
 	configPath := argumentValue(os.Args[1:], "config")
@@ -155,7 +161,110 @@ func commandMetadata() completion.Command {
 			Flags: []completion.Flag{
 				{Name: "check", Description: "Fail when generated files are stale"},
 			},
+		}, {
+			Name:        "provider",
+			Description: "Inspect and validate activity providers",
+			Subcommands: []completion.Command{
+				{Name: "list", Description: "List configured activity providers", Flags: []completion.Flag{{Name: "config", Description: "YAML configuration file", Value: true}, {Name: "json", Description: "Print JSON"}}},
+				{Name: "validate", Description: "Validate provider commands and protocol output", Flags: []completion.Flag{{Name: "config", Description: "YAML configuration file", Value: true}, {Name: "json", Description: "Print JSON"}}},
+			},
 		}},
+	}
+}
+
+func runProvider(args []string) {
+	if len(args) == 0 || (args[0] != "list" && args[0] != "validate") {
+		fmt.Fprintln(os.Stderr, "traces: provider requires list or validate")
+		os.Exit(1)
+	}
+	action := args[0]
+	flags := flag.NewFlagSet("traces provider "+action, flag.ContinueOnError)
+	configPath := flags.String("config", "", "YAML configuration file")
+	asJSON := flags.Bool("json", false, "print JSON")
+	if err := flags.Parse(args[1:]); err != nil {
+		os.Exit(1)
+	}
+	if flags.NArg() > 1 {
+		fmt.Fprintf(os.Stderr, "traces: provider %s accepts at most one provider name\n", action)
+		os.Exit(1)
+	}
+	settings, err := source.LoadSettings(*configPath)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "traces: %v\n", err)
+		os.Exit(1)
+	}
+	names := make([]string, 0, len(settings.Providers))
+	for name := range settings.Providers {
+		names = append(names, name)
+	}
+	slices.Sort(names)
+	if flags.NArg() == 1 {
+		selected := flags.Arg(0)
+		if _, ok := settings.Providers[selected]; !ok {
+			fmt.Fprintf(os.Stderr, "traces: unknown provider %q\n", selected)
+			os.Exit(1)
+		}
+		names = []string{selected}
+	}
+	if action == "list" {
+		if *asJSON {
+			data, _ := json.Marshal(settings.Providers)
+			fmt.Println(string(data))
+			return
+		}
+		if len(names) == 0 {
+			fmt.Println("No activity providers are configured.")
+			return
+		}
+		for _, name := range names {
+			manifest := settings.Providers[name]
+			description := manifest.Description
+			if description == "" {
+				description = "Agent activity source"
+			}
+			fmt.Printf("%s\n  %s\n  provides  %s\n  command   %s\n", name, description, strings.Join(manifest.Capabilities, ", "), strings.Join(manifest.Command, " "))
+		}
+		return
+	}
+	directory, _ := os.Getwd()
+	if len(names) == 0 {
+		if *asJSON {
+			fmt.Println("[]")
+		} else {
+			fmt.Println("No activity providers are configured.")
+		}
+		return
+	}
+	results := make([]source.Validation, 0, len(names))
+	failed := false
+	for _, name := range names {
+		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		result := source.Validate(ctx, name, settings.Providers[name], directory)
+		cancel()
+		results = append(results, result)
+		failed = failed || result.Status != "ok"
+	}
+	if *asJSON {
+		data, _ := json.Marshal(results)
+		fmt.Println(string(data))
+	} else {
+		for _, result := range results {
+			mark := "+"
+			if result.Status != "ok" {
+				mark = "x"
+			}
+			fmt.Printf("%s %s · activity\n", mark, result.Name)
+			for _, check := range result.Checks {
+				checkMark := "+"
+				if check.Status != "ok" {
+					checkMark = "x"
+				}
+				fmt.Printf("  %s %-12s %s\n", checkMark, check.Name, check.Message)
+			}
+		}
+	}
+	if failed {
+		os.Exit(1)
 	}
 }
 

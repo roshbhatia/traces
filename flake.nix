@@ -41,7 +41,7 @@
         system:
         let
           pkgs = nixpkgs.legacyPackages.${system};
-          version = "0.3.0";
+          version = "0.4.0";
           mkPackage =
             {
               name,
@@ -52,9 +52,12 @@
               pname = name;
               inherit version;
               src = ./.;
-              vendorHash = "sha256-owS90G90Tybz2RSLqDW64pl6TQMBC4EiKmQALwbD0Z8=";
+              vendorHash = "sha256-SY6o7kaHBn0k221+q/GdsYa+iJ/NIldkl9y+Klh4Ztc=";
               subPackages = [ subPackage ];
-              nativeBuildInputs = pkgs.lib.optional completions pkgs.installShellFiles;
+              nativeBuildInputs = pkgs.lib.optionals completions [
+                pkgs.gitMinimal
+                pkgs.installShellFiles
+              ];
               doCheck = completions;
               checkPhase = pkgs.lib.optionalString completions ''
                 runHook preCheck

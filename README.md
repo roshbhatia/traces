@@ -42,12 +42,15 @@ another file. Nested environment names override YAML, such as
 color: auto
 providers:
   claude:
+    description: Read Claude Code transcript activity
     command: [traces-provider-claude]
     capabilities: [activity]
   codex:
+    description: Read Codex rollout activity
     command: [traces-provider-codex]
     capabilities: [activity]
   opencode:
+    description: Read OpenCode session activity
     command: [traces-provider-opencode]
     capabilities: [activity]
 sources:
@@ -72,6 +75,17 @@ by command, width, and patch under the user cache directory.
 
 Harness readers live in `extras/` as separate binaries. Private providers can
 stay in downstream configuration without changing or rebuilding Traces.
+
+Inspect and test providers without opening the TUI:
+
+```bash
+traces provider list
+traces provider validate
+traces provider validate codex
+```
+
+Validation checks the YAML manifest, resolves the executable, runs a bounded
+zero-length activity query, and verifies every returned protocol line.
 
 Generate the schema and command reference with `traces generate`. CI uses
 `traces generate --check` to reject stale output.
@@ -106,6 +120,28 @@ Generate README command docs and JSON Schema
 | Option | Description |
 | --- | --- |
 | `--check` | Fail when generated files are stale |
+
+### `traces provider`
+
+Inspect and validate activity providers
+
+### `traces provider list`
+
+List configured activity providers
+
+| Option | Description |
+| --- | --- |
+| `--config` `<value>` | YAML configuration file |
+| `--json` | Print JSON |
+
+### `traces provider validate`
+
+Validate provider commands and protocol output
+
+| Option | Description |
+| --- | --- |
+| `--config` `<value>` | YAML configuration file |
+| `--json` | Print JSON |
 
 <!-- END GENERATED:cli -->
 

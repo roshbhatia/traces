@@ -10,7 +10,7 @@ require (
 	github.com/charmbracelet/lipgloss v1.1.1-0.20250404203927-76690c660834
 	github.com/charmbracelet/x/ansi v0.11.6
 	github.com/muesli/termenv v0.16.0
-	github.com/roshbhatia/go-utils v0.7.0
+	github.com/roshbhatia/go-utils v0.8.0
 )
 
 require (

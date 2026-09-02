@@ -1,7 +1,9 @@
 package source
 
 import (
+	"context"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -108,6 +110,34 @@ func TestSchemaDescribesProviderCommands(t *testing.T) {
 		if !strings.Contains(string(data), want) {
 			t.Fatalf("schema omits %s", want)
 		}
+	}
+}
+
+func TestValidateRunsProviderAndChecksProtocol(t *testing.T) {
+	shell, err := exec.LookPath("sh")
+	if err != nil {
+		t.Fatal(err)
+	}
+	result := Validate(context.Background(), "local", Manifest{
+		Command:      []string{shell, "-c", `printf '%s\n' '{"traceId":"demo","spanId":"root","name":"validation"}'`},
+		Capabilities: []string{"activity"},
+	}, t.TempDir())
+	if result.Status != "ok" || len(result.Checks) != 3 {
+		t.Fatalf("validation = %+v", result)
+	}
+}
+
+func TestValidateRejectsInvalidProtocol(t *testing.T) {
+	shell, err := exec.LookPath("sh")
+	if err != nil {
+		t.Fatal(err)
+	}
+	result := Validate(context.Background(), "invalid", Manifest{
+		Command:      []string{shell, "-c", `printf 'not json\n'`},
+		Capabilities: []string{"activity"},
+	}, t.TempDir())
+	if result.Status != "failed" || !strings.Contains(result.Checks[len(result.Checks)-1].Message, "not a JSON object") {
+		t.Fatalf("validation = %+v", result)
 	}
 }
 

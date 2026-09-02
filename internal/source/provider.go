@@ -72,6 +72,115 @@ type Provider struct {
 	harnesses []string
 }
 
+// ValidationCheck describes one deterministic provider contract check.
+type ValidationCheck struct {
+	Message string `json:"message"`
+	Name    string `json:"name"`
+	Status  string `json:"status"`
+}
+
+// Validation is the complete result for one configured provider.
+type Validation struct {
+	Checks   []ValidationCheck `json:"checks"`
+	Name     string            `json:"name"`
+	Status   string            `json:"status"`
+	Command  []string          `json:"command,omitempty"`
+	Provides []string          `json:"provides"`
+}
+
+func validationCheck(name, message string, ok bool) ValidationCheck {
+	status := "failed"
+	if ok {
+		status = "ok"
+	}
+	return ValidationCheck{Name: name, Message: message, Status: status}
+}
+
+// Validate resolves one provider, runs a zero-length activity query, and
+// verifies every returned protocol line without opening the interactive UI.
+func Validate(ctx context.Context, name string, manifest Manifest, directory string) Validation {
+	result := Validation{Name: name, Provides: append([]string{}, manifest.Capabilities...)}
+	activity := slices.Contains(manifest.Capabilities, "activity")
+	result.Checks = append(result.Checks, validationCheck(
+		"manifest", "provider advertises activity", activity,
+	))
+	if !activity {
+		result.Status = "failed"
+		return result
+	}
+	provider, err := resolveOne(name, Settings{Providers: map[string]Manifest{name: manifest}})
+	if err != nil {
+		result.Checks = append(result.Checks, validationCheck("executable", err.Error(), false))
+		result.Status = "failed"
+		return result
+	}
+	result.Command = append([]string{}, provider.Command...)
+	result.Checks = append(result.Checks, validationCheck(
+		"executable", "resolved "+provider.Command[0], true,
+	))
+	args := append([]string{}, provider.Command[1:]...)
+	args = append(args, "--since", "0s", "--session", "traces-provider-validation")
+	command := exec.CommandContext(ctx, provider.Command[0], args...)
+	command.Env = append(os.Environ(),
+		"TRACES_DIRECTORY="+directory,
+		"TRACES_SESSION=traces-provider-validation",
+	)
+	stderr := &strings.Builder{}
+	command.Stderr = stderr
+	output, err := command.Output()
+	if err != nil {
+		message := strings.TrimSpace(stderr.String())
+		if message == "" {
+			message = err.Error()
+		}
+		result.Checks = append(result.Checks, validationCheck("probe", message, false))
+		result.Status = "failed"
+		return result
+	}
+	if err := validateOutput(output); err != nil {
+		result.Checks = append(result.Checks, validationCheck("protocol", err.Error(), false))
+		result.Status = "failed"
+		return result
+	}
+	message := "accepted empty activity for a zero-length window"
+	if len(bytes.TrimSpace(output)) > 0 {
+		message = "returned valid newline-delimited activity"
+	}
+	result.Checks = append(result.Checks, validationCheck("protocol", message, true))
+	result.Status = "ok"
+	return result
+}
+
+func validateOutput(output []byte) error {
+	rows := bufio.NewScanner(bytes.NewReader(output))
+	rows.Buffer(make([]byte, 1<<20), 1<<26)
+	lineNumber := 0
+	for rows.Scan() {
+		lineNumber++
+		text := bytes.TrimSpace(rows.Bytes())
+		if len(text) == 0 {
+			continue
+		}
+		var value map[string]json.RawMessage
+		if err := json.Unmarshal(text, &value); err != nil {
+			return fmt.Errorf("line %d is not a JSON object", lineNumber)
+		}
+		if _, otlp := value["resourceSpans"]; otlp {
+			continue
+		}
+		if _, event := value["event"]; event {
+			continue
+		}
+		if _, span := value["spanId"]; !span {
+			return fmt.Errorf("line %d is neither a span, event, nor OTLP export", lineNumber)
+		}
+	}
+	if err := rows.Err(); err != nil {
+		return fmt.Errorf("read output: %w", err)
+	}
+	return nil
+}
+
 // Resolve picks the sources to read. An explicit ask, from the flag or from the
 // environment, is taken as given and never scoped: it is the escape hatch for a
 // one-off read. With no ask, the per-harness table decides, and a source whose
