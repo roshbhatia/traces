@@ -41,32 +41,76 @@
         system:
         let
           pkgs = nixpkgs.legacyPackages.${system};
-          traces = pkgs.buildGoModule {
-            pname = "traces";
-            version = "0.2.0";
-            src = ./.;
-            vendorHash = "sha256-aWLUPzUTpAgFlnTxBXfmwEAE1SAMjk+Kj7XrcpLLKs8=";
-            nativeBuildInputs = [ pkgs.installShellFiles ];
-            postInstall = ''
-              installShellCompletion \
-                --cmd traces \
-                --bash <("$out/bin/traces" completion bash) \
-                --fish <("$out/bin/traces" completion fish) \
-                --zsh <("$out/bin/traces" completion zsh)
-              mkdir -p "$out/share/nushell/vendor/autoload"
-              "$out/bin/traces" completion nu > "$out/share/nushell/vendor/autoload/traces.nu"
-            '';
-            meta = {
-              description = "Inspect local agent activity as a folding trace tree";
-              homepage = "https://github.com/roshbhatia/traces";
-              license = pkgs.lib.licenses.mit;
-              mainProgram = "traces";
-              platforms = pkgs.lib.platforms.unix;
+          version = "0.3.0";
+          mkPackage =
+            {
+              name,
+              subPackage,
+              completions ? false,
+            }:
+            pkgs.buildGoModule {
+              pname = name;
+              inherit version;
+              src = ./.;
+              vendorHash = "sha256-owS90G90Tybz2RSLqDW64pl6TQMBC4EiKmQALwbD0Z8=";
+              subPackages = [ subPackage ];
+              nativeBuildInputs = pkgs.lib.optional completions pkgs.installShellFiles;
+              doCheck = completions;
+              checkPhase = pkgs.lib.optionalString completions ''
+                runHook preCheck
+                go test -race ./...
+                go run . generate --check
+                runHook postCheck
+              '';
+              postInstall = pkgs.lib.optionalString completions ''
+                installShellCompletion \
+                  --cmd traces \
+                  --bash <("$out/bin/traces" completion bash) \
+                  --fish <("$out/bin/traces" completion fish) \
+                  --zsh <("$out/bin/traces" completion zsh)
+                mkdir -p "$out/share/nushell/vendor/autoload"
+                "$out/bin/traces" completion nu > "$out/share/nushell/vendor/autoload/traces.nu"
+              '';
+              meta = {
+                description = "Composable agent trace viewer component";
+                homepage = "https://github.com/roshbhatia/traces";
+                license = pkgs.lib.licenses.mit;
+                mainProgram = name;
+                platforms = pkgs.lib.platforms.unix;
+              };
             };
+          traces = mkPackage {
+            name = "traces";
+            subPackage = ".";
+            completions = true;
+          };
+          claude = mkPackage {
+            name = "traces-provider-claude";
+            subPackage = "./extras/traces-provider-claude";
+          };
+          codex = mkPackage {
+            name = "traces-provider-codex";
+            subPackage = "./extras/traces-provider-codex";
+          };
+          opencode = mkPackage {
+            name = "traces-provider-opencode";
+            subPackage = "./extras/traces-provider-opencode";
+          };
+          full = pkgs.symlinkJoin {
+            name = "traces-full-${version}";
+            paths = [
+              traces
+              claude
+              codex
+              opencode
+            ];
           };
         in
         {
-          inherit traces;
+          inherit traces full;
+          provider-claude = claude;
+          provider-codex = codex;
+          provider-opencode = opencode;
           default = traces;
         }
       );

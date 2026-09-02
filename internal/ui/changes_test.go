@@ -28,12 +28,11 @@ func TestDiffProviderCachesByContentAndWidth(t *testing.T) {
 	dir := t.TempDir()
 	counter := filepath.Join(dir, "calls")
 	provider := filepath.Join(dir, "provider")
-	script := "#!/bin/sh\nprintf x >> \"" + counter + "\"\ncat >/dev/null\nprintf 'provider view\\n'\n"
+	script := "#!/bin/sh\nprintf x >> \"" + counter + "\"\nprintf 'provider view\\n'\n"
 	if err := os.WriteFile(provider, []byte(script), 0o700); err != nil {
 		t.Fatal(err)
 	}
-	t.Setenv(diffProviderEnv, provider)
-	renderer := newDiffRenderer()
+	renderer := newDiffRenderer([]string{provider})
 	patch := "--- a/file.go\n+++ b/file.go\n@@ -1 +1 @@\n-old\n+new\n"
 	if first, second := renderer.render(patch, 80), renderer.render(patch, 80); first != second || first != "provider view" {
 		t.Fatalf("renders = %q and %q", first, second)
@@ -44,6 +43,16 @@ func TestDiffProviderCachesByContentAndWidth(t *testing.T) {
 	}
 	if string(calls) != "x" {
 		t.Fatalf("provider calls = %q, want one", calls)
+	}
+}
+
+func TestDiffProviderAcceptsGitDifftoolArguments(t *testing.T) {
+	t.Setenv("XDG_CACHE_HOME", t.TempDir())
+	patch := "diff --git a/file.go b/file.go\n--- a/file.go\n+++ b/file.go\n@@ -1 +1 @@\n-old\n+new\n"
+	renderer := newDiffRenderer([]string{"git", "diff", "--no-index", "--color=never", "--", "$LOCAL", "$REMOTE"})
+	out := renderer.render(patch, 80)
+	if !strings.Contains(out, "-old") || !strings.Contains(out, "+new") {
+		t.Fatalf("difftool output:\n%s", out)
 	}
 }
 

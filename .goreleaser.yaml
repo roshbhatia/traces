@@ -8,6 +8,27 @@ builds:
       - CGO_ENABLED=0
     goos: [darwin, linux]
     goarch: [amd64, arm64]
+  - id: traces-provider-claude
+    main: ./extras/traces-provider-claude
+    binary: traces-provider-claude
+    env:
+      - CGO_ENABLED=0
+    goos: [darwin, linux]
+    goarch: [amd64, arm64]
+  - id: traces-provider-codex
+    main: ./extras/traces-provider-codex
+    binary: traces-provider-codex
+    env:
+      - CGO_ENABLED=0
+    goos: [darwin, linux]
+    goarch: [amd64, arm64]
+  - id: traces-provider-opencode
+    main: ./extras/traces-provider-opencode
+    binary: traces-provider-opencode
+    env:
+      - CGO_ENABLED=0
+    goos: [darwin, linux]
+    goarch: [amd64, arm64]
 
 archives:
   - formats: [tar.gz]

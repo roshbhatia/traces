@@ -257,7 +257,7 @@ type Model struct {
 // inspector box on every frame.
 const paneChrome = 3
 
-func New(store *session.Store, pinned, source string) Model {
+func New(store *session.Store, pinned, source string, diffCommands ...[]string) Model {
 	// lipgloss asks the terminal for its background on first render, and Bubble
 	// Tea v1 reads the reply as a burst of keys: a hex digit `d` in the answer
 	// paged the view and cleared follow before anyone touched the keyboard.
@@ -266,6 +266,10 @@ func New(store *session.Store, pinned, source string) Model {
 	lipgloss.SetColorProfile(termenv.ANSI)
 	lipgloss.SetHasDarkBackground(true)
 
+	var diffCommand []string
+	if len(diffCommands) > 0 {
+		diffCommand = diffCommands[0]
+	}
 	m := Model{
 		store:  store,
 		pinned: pinned,
@@ -281,7 +285,7 @@ func New(store *session.Store, pinned, source string) Model {
 		split:  50,
 		pane:   viewport.New(52, 20),
 		spin:   spinner.New(spinner.WithSpinner(spinner.MiniDot), spinner.WithStyle(live)),
-		diffs:  newDiffRenderer(),
+		diffs:  newDiffRenderer(diffCommand),
 		now:    time.Now(),
 	}
 	m.reload()
@@ -2204,7 +2208,7 @@ func (m Model) tabBody(r row) string {
 	if len(parts) == 0 && len(out) == 1 {
 		out = append(out, faint.Render("  nothing recorded on this row"))
 		if r.kind == kindPrompt || r.kind == kindThink {
-			out = append(out, faint.Render("  add `transcript` to TRACES_PROVIDER to join the reply text"))
+			out = append(out, faint.Render("  add an activity provider to join the reply text"))
 		}
 	}
 	return strings.Join(out, "\n")

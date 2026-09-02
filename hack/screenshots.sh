@@ -29,4 +29,7 @@ printf '%s\n' \
 
   PATH="$build_dir:$PATH" \
     vhs "$repo_dir/hack/traces.tape" --output "$repo_dir/docs/traces.gif"
+
+  PATH="${build_dir}:${PATH}" \
+    vhs "${repo_dir}/hack/traces-noninteractive.tape" --output "${repo_dir}/docs/traces-noninteractive.gif"
 )

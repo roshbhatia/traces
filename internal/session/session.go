@@ -13,7 +13,6 @@ import (
 	"time"
 
 	"github.com/roshbhatia/traces/internal/otlp"
-	"github.com/roshbhatia/traces/internal/transcript"
 )
 
 type Role string
@@ -507,7 +506,7 @@ func (s *Store) AddRecords(records []otlp.Record) {
 			found := s.hold(one)
 			found.prompts = append(found.prompts, one)
 			found.dirty = true
-		case one.Event == transcript.EventText || strings.HasSuffix(one.Event, ".assistant"):
+		case one.Event == "assistant" || strings.HasSuffix(one.Event, ".assistant"):
 			id := one.Attrs["request_id"]
 			if id == "" {
 				continue
@@ -515,7 +514,7 @@ func (s *Store) AddRecords(records []otlp.Record) {
 			found := s.hold(one)
 			found.texts[id] = one
 			found.dirty = true
-		case one.Event == transcript.EventResult || strings.HasSuffix(one.Event, ".tool_result"):
+		case one.Event == "tool_result" || strings.HasSuffix(one.Event, ".tool_result"):
 			id := one.Attrs["tool_use_id"]
 			if id == "" {
 				continue

@@ -2,10 +2,8 @@
 // the local collector writes. It attaches to a session that is already running,
 // the way you would attach to a log.
 //
-// A harness that cannot reach the local collector gets a provider, named by
-// TRACES_PROVIDER or --provider. A provider is read as well as the file, not
-// instead of it: on this machine one harness is redirected and four reach the
-// collector directly. See internal/source for what a provider has to print.
+// Additional activity sources are external providers declared in YAML or named
+// by --provider. Providers add to the collector file rather than replacing it.
 package main
 
 import (
@@ -14,6 +12,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"sync"
@@ -37,18 +36,29 @@ func main() {
 		generateCompletion(os.Args[2:])
 		return
 	}
+	if len(os.Args) > 1 && os.Args[1] == "generate" {
+		runGenerate(os.Args[2:])
+		return
+	}
+	configPath := argumentValue(os.Args[1:], "config")
+	settings, err := source.LoadSettings(configPath)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "traces: %v\n", err)
+		os.Exit(1)
+	}
 	file := flag.String("file", "", "OTLP JSON file to read (default: the collector's)")
+	flag.String("config", configPath, "configuration file (default: ~/.config/traces/config.yaml)")
 	pinned := flag.String("session", "", "attach to this session, by id or prefix")
 	list := flag.Bool("list", false, "list the sessions and exit")
 	once := flag.Bool("once", false, "print the tree once and exit; status 2 when a span failed")
-	asked := flag.String("provider", "", "read exactly these sources, comma separated, instead of the ones declared per harness in "+source.ConfigFile())
+	asked := flag.String("provider", "", "read exactly these sources, comma separated, instead of the ones declared in "+source.ConfigFile(configPath))
 	back := flag.Duration("since", 2*time.Hour, "with a provider, how far back the first read reaches")
 	every := flag.Duration("poll", 15*time.Second, "with a provider, how often to re-read")
 	lag := flag.Duration("lag", 90*time.Second, "with a provider, how much every poll overlaps the last")
 	all := flag.Bool("all", false, "show every run on this machine, not only this directory's")
 	asJSON := flag.Bool("json", false, "print the spans as newline delimited JSON and exit")
 	service := flag.String("service", "", "keep only this service, by name or prefix")
-	color := flag.String("color", "auto", "color output: auto, always, or never")
+	color := flag.String("color", settings.Color, "color output: auto, always, or never")
 	flag.Parse()
 	switch *color {
 	case "auto":
@@ -74,7 +84,7 @@ func main() {
 		}
 	}
 
-	providers, err := source.Resolve(*asked, *service)
+	providers, err := source.Resolve(*asked, *service, settings)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "traces: %v\n", err)
 		os.Exit(1)
@@ -94,12 +104,12 @@ func main() {
 		path = ""
 	}
 
-	// A provider adds to the collector's file rather than replacing it. Only
-	// one harness on this machine needs a provider, and goose, codex, opencode
-	// and copilot all reach the collector directly: reading one source meant
-	// `traces` showed the redirected harness and none of the others, and every
-	// look at the rest needed the variable unset by hand.
-	src := sources{path: path, providers: providers, back: *back, every: *every, lag: *lag, service: *service}
+	// Providers add to the collector file rather than replacing it. This keeps
+	// local telemetry and command-backed activity visible in one view.
+	src := sources{
+		path: path, providers: providers, back: *back, every: *every, lag: *lag,
+		service: *service, diffCommand: settings.Diff.Command,
+	}
 
 	if *asJSON || *list || *once {
 		os.Exit(src.report(which, scope, directory, *list, *asJSON))
@@ -112,12 +122,22 @@ func generateCompletion(args []string) {
 		fmt.Fprintln(os.Stderr, "traces: completion requires bash, zsh, fish, or nu")
 		os.Exit(1)
 	}
-	out, err := completion.Generate(args[0], completion.Command{
+	out, err := completion.Generate(args[0], commandMetadata())
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "traces: %v\n", err)
+		os.Exit(1)
+	}
+	fmt.Println(out)
+}
+
+func commandMetadata() completion.Command {
+	return completion.Command{
 		Name:        "traces",
 		Description: "Inspect agent activity as a trace tree",
 		Flags: []completion.Flag{
 			{Name: "all", Description: "Show every local run"},
 			{Name: "color", Description: "Color output", Value: true, Values: []string{"auto", "always", "never"}},
+			{Name: "config", Description: "YAML configuration file", Value: true},
 			{Name: "file", Description: "Read an OTLP JSON file", Value: true},
 			{Name: "json", Description: "Print newline-delimited JSON"},
 			{Name: "lag", Description: "Provider overlap window", Value: true},
@@ -129,12 +149,81 @@ func generateCompletion(args []string) {
 			{Name: "session", Description: "Attach by session ID or prefix", Value: true},
 			{Name: "since", Description: "Initial provider window", Value: true},
 		},
-	})
+		Subcommands: []completion.Command{{
+			Name:        "generate",
+			Description: "Generate README command docs and JSON Schema",
+			Flags: []completion.Flag{
+				{Name: "check", Description: "Fail when generated files are stale"},
+			},
+		}},
+	}
+}
+
+func runGenerate(args []string) {
+	flags := flag.NewFlagSet("traces generate", flag.ContinueOnError)
+	check := flags.Bool("check", false, "fail when generated files are stale")
+	if err := flags.Parse(args); err != nil {
+		fmt.Fprintf(os.Stderr, "traces: %v\n", err)
+		os.Exit(1)
+	}
+	if flags.NArg() != 0 {
+		fmt.Fprintln(os.Stderr, "traces: generate accepts only flags")
+		os.Exit(1)
+	}
+	schema, err := source.Schema()
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "traces: %v\n", err)
 		os.Exit(1)
 	}
-	fmt.Println(out)
+	readme, err := os.ReadFile("README.md")
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "traces: read README.md: %v\n", err)
+		os.Exit(1)
+	}
+	generated, err := completion.ReplaceSection(string(readme), "cli", completion.Markdown(commandMetadata()))
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "traces: %v\n", err)
+		os.Exit(1)
+	}
+	outputs := map[string][]byte{
+		"README.md":                 []byte(generated),
+		"schema/traces.schema.json": schema,
+	}
+	for path, data := range outputs {
+		if *check {
+			current, readErr := os.ReadFile(path)
+			if readErr != nil || string(current) != string(data) {
+				fmt.Fprintf(os.Stderr, "traces: %s is stale; run traces generate\n", path)
+				os.Exit(1)
+			}
+			continue
+		}
+		if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+			fmt.Fprintf(os.Stderr, "traces: %v\n", err)
+			os.Exit(1)
+		}
+		if err := os.WriteFile(path, data, 0o644); err != nil {
+			fmt.Fprintf(os.Stderr, "traces: %v\n", err)
+			os.Exit(1)
+		}
+	}
+}
+
+func argumentValue(args []string, name string) string {
+	long := "--" + name
+	short := "-" + name
+	for index, argument := range args {
+		if value, ok := strings.CutPrefix(argument, long+"="); ok {
+			return value
+		}
+		if value, ok := strings.CutPrefix(argument, short+"="); ok {
+			return value
+		}
+		if (argument == long || argument == short) && index+1 < len(args) {
+			return args[index+1]
+		}
+	}
+	return ""
 }
 
 // attached names the run to open. A flag wins, then the session this process
@@ -151,12 +240,13 @@ func attached(pinned string, all bool) string {
 
 // sources is every place this machine keeps spans.
 type sources struct {
-	path      string
-	providers []*source.Provider
-	back      time.Duration
-	every     time.Duration
-	lag       time.Duration
-	service   string
+	path        string
+	providers   []*source.Provider
+	back        time.Duration
+	every       time.Duration
+	lag         time.Duration
+	service     string
+	diffCommand []string
 }
 
 // name says what the frame is reading, so an empty view names the source that
@@ -495,16 +585,16 @@ func (s sources) watch(which string, scope []string, directory string) int {
 		}
 	}()
 
-	return run(batches, stop, which, scope, directory, s.name())
+	return run(batches, stop, which, scope, directory, s.name(), s.diffCommand)
 }
 
 // run owns the program either way. Follow owns its own goroutine, so the spans
 // arrive as messages rather than as a blocking read inside Update.
-func run(batches chan otlp.Batch, stop chan struct{}, which string, scope []string, directory, from string) int {
+func run(batches chan otlp.Batch, stop chan struct{}, which string, scope []string, directory, from string, diffCommand []string) int {
 	store := session.NewStore()
 	store.Scope(scope, directory)
 	program := tea.NewProgram(
-		ui.New(store, which, from),
+		ui.New(store, which, from, diffCommand),
 		tea.WithAltScreen(),
 		tea.WithMouseCellMotion(),
 	)

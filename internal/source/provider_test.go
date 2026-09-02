@@ -3,127 +3,111 @@ package source
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
-func TestTranscriptAliasExpandsHarnessProvidersOnce(t *testing.T) {
-	providers, err := Resolve("transcript,opencode", "")
-	if err != nil {
-		t.Fatal(err)
-	}
-	want := []string{"claude", "codex", "opencode"}
-	if len(providers) != len(want) {
-		t.Fatalf("providers = %d, want %d", len(providers), len(want))
-	}
-	for index, provider := range providers {
-		if provider.Name != want[index] {
-			t.Errorf("provider %d = %q, want %q", index, provider.Name, want[index])
-		}
-	}
-}
-
-func writeConfig(t *testing.T, body string) {
+func writeSettings(t *testing.T, body string) (string, Settings) {
 	t.Helper()
-	path := filepath.Join(t.TempDir(), "traces.json")
+	path := filepath.Join(t.TempDir(), "config.yaml")
 	if err := os.WriteFile(path, []byte(body), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	t.Setenv(ConfigEnv, path)
+	settings, err := LoadSettings(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return path, settings
 }
 
-// A machine that declares nothing still reads every harness that keeps its work
-// on disk, which is the case the defaults exist for.
-func TestDefaultsNeedNoConfig(t *testing.T) {
-	t.Setenv(ConfigEnv, filepath.Join(t.TempDir(), "absent.json"))
-	names := map[string]bool{}
-	for _, one := range wanted(Config(), "") {
-		names[one.Name] = true
+func TestLoadSettingsAndEnvironment(t *testing.T) {
+	executable, err := os.Executable()
+	if err != nil {
+		t.Fatal(err)
 	}
-	for _, want := range []string{"claude", "codex", "opencode"} {
-		if !names[want] {
-			t.Errorf("default table is missing %q: %v", want, names)
-		}
+	_, settings := writeSettings(t, "color: auto\nproviders:\n  local:\n    command: ["+executable+"]\n    capabilities: [activity]\nsources:\n  codex: [local]\ndiff:\n  command: []\n")
+	t.Setenv("TRACES_COLOR", "never")
+	path := filepath.Join(t.TempDir(), "override.yaml")
+	if err := os.WriteFile(path, []byte("color: always\n"), 0o600); err != nil {
+		t.Fatal(err)
 	}
-}
-
-func TestConfigReplacesOneHarnessOnly(t *testing.T) {
-	writeConfig(t, `{"providers":{"claude-code":["observe","claude"]}}`)
-	table := Config()
-	got := table["claude-code"]
-	if len(got) != 2 || got[0] != "observe" || got[1] != "claude" {
-		t.Errorf("claude-code = %v", got)
+	settings, err = LoadSettings(path)
+	if err != nil {
+		t.Fatal(err)
 	}
-	// Replacing one harness must not take the others with it.
-	if len(table["codex"]) == 0 {
-		t.Errorf("codex lost its default: %v", table)
+	if settings.Color != "never" {
+		t.Fatalf("color = %q", settings.Color)
 	}
 }
 
-func TestEmptyListTakesASourceAway(t *testing.T) {
-	writeConfig(t, `{"providers":{"codex":[]}}`)
-	if got, ok := Config()["codex"]; ok {
-		t.Errorf("codex = %v, want removed", got)
+func TestCoreDefaultsHaveNoHarnessProviders(t *testing.T) {
+	settings, err := LoadSettings(filepath.Join(t.TempDir(), "absent.yaml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(settings.Providers) != 0 || len(settings.Sources) != 0 {
+		t.Fatalf("defaults include integrations: %+v", settings)
 	}
 }
 
-// The point of declaring a source per harness: reading one harness must not
-// fetch the sources that answer only for another.
 func TestServiceFilterSkipsOtherHarnesses(t *testing.T) {
-	writeConfig(t, `{"providers":{"claude-code":["observe","claude"],"codex":["codex"]}}`)
-	for _, one := range wanted(Config(), "codex") {
-		if one.Name == "observe" || one.Name == "claude" {
-			t.Errorf("reading codex fetched %q", one.Name)
-		}
+	table := map[string][]string{
+		"claude-code": {"observe", "claude"},
+		"codex":       {"codex"},
 	}
-	found := false
-	for _, one := range wanted(Config(), "codex") {
-		found = found || one.Name == "codex"
-	}
-	if !found {
-		t.Error("reading codex skipped its own source")
-	}
-}
-
-// A prefix is what a reader types: `codex` for the service `codex_cli_rs`.
-func TestServiceFilterMatchesAPrefix(t *testing.T) {
-	writeConfig(t, `{"providers":{"codex_cli_rs":["codex"]}}`)
-	if got := wanted(Config(), "codex"); len(got) != 1 {
-		t.Errorf("providers = %d, want 1", len(got))
+	got := wanted(table, "codex")
+	if len(got) != 1 || got[0].Name != "codex" {
+		t.Fatalf("providers = %v", got)
 	}
 }
 
 func TestOneSourceServingTwoHarnessesIsFetchedOnce(t *testing.T) {
-	writeConfig(t, `{"providers":{"claude-code":["observe"],"codex":["observe"]}}`)
-	got := wanted(Config(), "")
-	seen := 0
-	for _, one := range got {
-		if one.Name == "observe" {
-			seen++
-			if one.For() != "claude-code+codex" {
-				t.Errorf("observe answers for %q", one.For())
-			}
-		}
-	}
-	if seen != 1 {
-		t.Errorf("observe resolved %d times, want 1", seen)
+	got := wanted(map[string][]string{
+		"claude-code": {"observe"},
+		"codex":       {"observe"},
+	}, "")
+	if len(got) != 1 || got[0].For() != "claude-code+codex" {
+		t.Fatalf("providers = %v", got)
 	}
 }
 
-// An explicit ask is the escape hatch and is never narrowed by the filter.
-func TestExplicitAskIgnoresTheServiceFilter(t *testing.T) {
-	got, err := Resolve("claude", "codex")
+func TestResolveUsesManifestCommand(t *testing.T) {
+	executable, err := os.Executable()
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(got) != 1 || got[0].Name != "claude" {
-		t.Errorf("providers = %v", got)
+	settings := Default()
+	settings.Providers["local"] = Manifest{
+		Command: []string{executable, "-test.run=none"}, Capabilities: []string{"activity"},
+	}
+	settings.Sources["codex"] = []string{"local"}
+	providers, err := Resolve("", "codex", settings)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(providers) != 1 || providers[0].Command[0] != executable || providers[0].Command[1] != "-test.run=none" {
+		t.Fatalf("providers = %+v", providers)
 	}
 }
 
-func TestMalformedConfigFallsBackToDefaults(t *testing.T) {
-	writeConfig(t, `{"providers":`)
-	if len(Config()) != len(Defaults) {
-		t.Errorf("table = %v, want the defaults", Config())
+func TestResolveRejectsWrongCapability(t *testing.T) {
+	settings := Default()
+	settings.Providers["display"] = Manifest{Command: []string{os.Args[0]}, Capabilities: []string{"display"}}
+	_, err := Resolve("display", "", settings)
+	if err == nil || !strings.Contains(err.Error(), "does not advertise activity") {
+		t.Fatalf("error = %v", err)
+	}
+}
+
+func TestSchemaDescribesProviderCommands(t *testing.T) {
+	data, err := Schema()
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, want := range []string{`"$schema"`, `"providers"`, `"capabilities"`, `"diff"`} {
+		if !strings.Contains(string(data), want) {
+			t.Fatalf("schema omits %s", want)
+		}
 	}
 }
 

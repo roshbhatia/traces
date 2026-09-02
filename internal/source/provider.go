@@ -1,7 +1,4 @@
-// Package source reads spans from wherever this machine keeps them. The
-// collector's file is always read, and a provider binary is the escape hatch
-// for the harness whose export is redirected somewhere traces cannot reach. Both
-// are read together, because one machine can have both kinds at once.
+// Package source reads spans from the collector and external provider commands.
 //
 // A provider is any executable that prints newline delimited JSON on stdout and
 // exits. One line is one span:
@@ -28,11 +25,9 @@
 // in the last N", and traces decides what is new. That suits a source that has to
 // be queried, which is the case this exists for.
 //
-// TRACES_PROVIDER takes a comma separated list, because two sources answer
-// different questions about the same run. On the machine this was built for,
-// `observe,transcript` reads remote spans and each harness activity stream.
-// The provider output is one shared contract, so either source can add spans,
-// messages, tool output, edits, or another event without changing the UI.
+// TRACES_PROVIDER takes a comma-separated list. The provider output is one
+// shared contract, so any source can add spans, messages, edits, or events
+// without changing the UI.
 package source
 
 import (
@@ -45,14 +40,12 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
 
-	opencodeactivity "github.com/roshbhatia/traces/internal/opencode"
 	"github.com/roshbhatia/traces/internal/otlp"
-	"github.com/roshbhatia/traces/internal/rollout"
-	"github.com/roshbhatia/traces/internal/transcript"
 )
 
 // Env names the provider without a flag, so a machine can carry the choice in
@@ -64,8 +57,8 @@ const Env = "TRACES_PROVIDER"
 const prefix = "traces-"
 
 type Provider struct {
-	// Binary is the resolved executable.
-	Binary string
+	// Command preserves the configured executable and argument boundaries.
+	Command []string
 	// Name is what the caller asked for, for error text and the header.
 	Name string
 	// Session narrows the read when the provider can do it. traces resolves a
@@ -73,35 +66,10 @@ type Provider struct {
 	Session string
 	// Directory lets providers find workspace-scoped sources such as Git commits.
 	Directory string
-	// read is set on a builtin, and Binary is empty there.
-	read func(context.Context, Query) (otlp.Batch, error)
 	// harnesses are the services this source answers for. It is empty on a
 	// source the caller named directly, which is a deliberate escape hatch and
 	// is never scoped.
 	harnesses []string
-}
-
-// Query scopes every provider read to the same session, workspace, and window.
-type Query struct {
-	Window    time.Duration
-	Session   string
-	Directory string
-}
-
-var aliases = map[string][]string{
-	"transcript": {"claude", "codex", "opencode"},
-}
-
-var builtin = map[string]func(context.Context, Query) (otlp.Batch, error){
-	"claude": func(_ context.Context, query Query) (otlp.Batch, error) {
-		return transcript.Read(transcript.Root(), query.Window, query.Session), nil
-	},
-	"codex": func(_ context.Context, query Query) (otlp.Batch, error) {
-		return rollout.Read(rollout.Root(), query.Window, query.Session), nil
-	},
-	"opencode": func(ctx context.Context, query Query) (otlp.Batch, error) {
-		return opencodeactivity.Read(ctx, "opencode", query.Window, query.Session, query.Directory)
-	},
 }
 
 // Resolve picks the sources to read. An explicit ask, from the flag or from the
@@ -111,32 +79,24 @@ var builtin = map[string]func(context.Context, Query) (otlp.Batch, error){
 //
 // The collector file is read either way. Only one harness on a machine usually
 // needs a source beyond it.
-func Resolve(ask, service string) ([]*Provider, error) {
+func Resolve(ask, service string, settings Settings) ([]*Provider, error) {
 	if ask == "" {
 		ask = strings.TrimSpace(os.Getenv(Env))
 	}
 	if ask == "" {
-		return declared(service)
+		return declared(service, settings)
 	}
 	out := []*Provider{}
 	seen := map[string]bool{}
-	requested := []string{}
 	for _, one := range strings.Split(ask, ",") {
 		one = strings.TrimSpace(one)
-		if expanded := aliases[one]; len(expanded) > 0 {
-			requested = append(requested, expanded...)
-		} else {
-			requested = append(requested, one)
-		}
-	}
-	for _, one := range requested {
 		// A trailing comma, or a variable set to the empty string, is a list of
 		// nothing rather than a provider named "".
 		if one == "" || seen[one] {
 			continue
 		}
 		seen[one] = true
-		found, err := resolveOne(one)
+		found, err := resolveOne(one, settings)
 		if err != nil {
 			return nil, err
 		}
@@ -149,10 +109,10 @@ func Resolve(ask, service string) ([]*Provider, error) {
 // does not carry is dropped with a warning rather than failing the read: the
 // table is shared configuration, and a harness that is not installed here is
 // the normal case rather than an error.
-func declared(service string) ([]*Provider, error) {
+func declared(service string, settings Settings) ([]*Provider, error) {
 	out := []*Provider{}
-	for _, one := range wanted(Config(), service) {
-		found, err := resolveOne(one.Name)
+	for _, one := range wanted(settings.Sources, service) {
+		found, err := resolveOne(one.Name, settings)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "traces: skipped %v\n", err)
 			continue
@@ -163,31 +123,35 @@ func declared(service string) ([]*Provider, error) {
 	return out, nil
 }
 
-func resolveOne(ask string) (*Provider, error) {
-	if run, ok := builtin[ask]; ok {
-		return &Provider{Name: ask, read: run}, nil
+func resolveOne(ask string, settings Settings) (*Provider, error) {
+	manifest, configured := settings.Providers[ask]
+	if configured && !slices.Contains(manifest.Capabilities, "activity") {
+		return nil, fmt.Errorf("provider %q does not advertise activity", ask)
 	}
-	binary := ask
-	if !strings.ContainsRune(ask, filepath.Separator) {
-		binary = prefix + ask
+	command := manifest.Command
+	if len(command) == 0 {
+		binary := ask
+		if !strings.ContainsRune(ask, filepath.Separator) {
+			binary = prefix + ask
+		}
+		command = []string{binary}
 	}
-	found, err := exec.LookPath(binary)
+	found, err := exec.LookPath(command[0])
 	if err != nil {
 		return nil, fmt.Errorf("provider %q: %w", ask, err)
 	}
-	return &Provider{Binary: found, Name: ask}, nil
+	command = append([]string{found}, command[1:]...)
+	return &Provider{Command: command, Name: ask}, nil
 }
 
 // Fetch runs the provider once over the window ending now.
 func (p Provider) Fetch(ctx context.Context, window time.Duration) (otlp.Batch, error) {
-	if p.read != nil {
-		return p.read(ctx, Query{Window: window, Session: p.Session, Directory: p.Directory})
-	}
-	args := []string{"--since", window.Round(time.Second).String()}
+	args := append([]string{}, p.Command[1:]...)
+	args = append(args, "--since", window.Round(time.Second).String())
 	if p.Session != "" {
 		args = append(args, "--session", p.Session)
 	}
-	cmd := exec.CommandContext(ctx, p.Binary, args...)
+	cmd := exec.CommandContext(ctx, p.Command[0], args...)
 	// Environment variables add context without breaking existing provider flags.
 	cmd.Env = append(os.Environ(), "TRACES_SESSION="+p.Session, "TRACES_DIRECTORY="+p.Directory)
 	stderr := &strings.Builder{}
