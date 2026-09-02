@@ -2,6 +2,8 @@
 
 ![Traces tree view](docs/traces.png)
 
+![Traces animated agent run](docs/traces.gif)
+
 `traces` renders local agent activity as a folding trace tree. It reads OTLP,
 Codex rollout files, OpenCode events, and harness transcripts.
 

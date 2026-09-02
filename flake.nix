@@ -97,6 +97,7 @@
               pkgs.goreleaser
               pkgs.ripgrep
               pkgs.charm-freeze
+              pkgs.vhs
               pkgs.fish
               pkgs.nushell
               pkgs.shfmt
