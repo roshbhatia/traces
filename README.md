@@ -1,5 +1,7 @@
 # traces
 
+![Traces tree view](docs/traces.png)
+
 `traces` renders local agent activity as a folding trace tree. It reads OTLP,
 Codex rollout files, OpenCode events, and harness transcripts.
 
@@ -32,5 +34,3 @@ go test -race ./...
 nix flake check
 ./hack/screenshots.sh
 ```
-
-![Traces tree view](docs/traces.png)
