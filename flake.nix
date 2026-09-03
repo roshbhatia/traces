@@ -157,6 +157,11 @@
           full = pkgs.symlinkJoin {
             name = "traces-full-${version}";
             paths = [ traces ] ++ lib.attrValues providerPackages;
+            nativeBuildInputs = [ pkgs.makeWrapper ];
+            postBuild = ''
+              wrapProgram "$out/bin/traces" \
+                --prefix XDG_DATA_DIRS : "$out/share"
+            '';
           };
           providerOutputs = lib.mapAttrs' (
             name: package: lib.nameValuePair "provider-${name}" package
