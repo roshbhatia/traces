@@ -41,7 +41,7 @@
         system:
         let
           pkgs = nixpkgs.legacyPackages.${system};
-          version = "0.5.0";
+          version = "0.5.1";
           mkPackage =
             {
               name,
@@ -73,7 +73,10 @@
                 runHook postCheck
               '';
               postInstall =
-                pkgs.lib.optionalString completions ''
+                pkgs.lib.optionalString (providerManifest != null) ''
+                  mv "$out/bin/${builtins.baseNameOf subPackage}" "$out/bin/${name}"
+                ''
+                + pkgs.lib.optionalString completions ''
                   installShellCompletion \
                     --cmd traces \
                     --bash <("$out/bin/traces" completion bash) \
@@ -146,9 +149,23 @@
         };
       });
 
-      checks = eachSystem (system: {
-        default = self.packages.${system}.default;
-      });
+      checks = eachSystem (
+        system:
+        let
+          pkgs = nixpkgs.legacyPackages.${system};
+          inherit (self.packages.${system}) full;
+        in
+        {
+          default = self.packages.${system}.default;
+          providers = pkgs.runCommand "traces-provider-layout" { } ''
+            for name in claude codex opencode; do
+              test -x "${full}/bin/traces-provider-$name"
+              test ! -e "${full}/bin/$name"
+            done
+            touch "$out"
+          '';
+        }
+      );
 
       devShells = eachSystem (
         system:
