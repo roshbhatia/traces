@@ -11,9 +11,9 @@ func TestActivityProviderReplacesRawRuntimeTree(t *testing.T) {
 	now := time.Now()
 	store := NewStore()
 	store.Add([]otlp.Span{
-		{SpanID: "raw", Name: "persist_rollout_items", Service: "codex_cli_rs", Session: "one", Start: now, End: now, Attrs: map[string]string{}},
-		{SpanID: "turn", Name: "agent.turn", Service: "codex_cli_rs", Session: "one", Start: now, End: now, Attrs: map[string]string{"traces.view": "activity"}},
-		{SpanID: "tool", ParentID: "turn", Name: "agent.tool", Service: "codex_cli_rs", Session: "one", Start: now, End: now, Attrs: map[string]string{"traces.view": "activity", "tool_name": "Shell"}},
+		{SpanID: "raw", Name: "runtime.persist", Service: "example-agent", Session: "one", Start: now, End: now, Attrs: map[string]string{}},
+		{SpanID: "turn", Name: "agent.turn", Service: "example-agent", Session: "one", Start: now, End: now, Attrs: map[string]string{"traces.view": "activity"}},
+		{SpanID: "tool", ParentID: "turn", Name: "agent.tool", Service: "example-agent", Session: "one", Start: now, End: now, Attrs: map[string]string{"traces.view": "activity", "tool_name": "Shell"}},
 	})
 
 	found := store.Session("one")
@@ -28,17 +28,67 @@ func TestActivityProviderReplacesRawRuntimeTree(t *testing.T) {
 	}
 }
 
-func TestToolNamesShareActionLabels(t *testing.T) {
+func TestActivityProviderAggregatesRuntimeOutcome(t *testing.T) {
+	now := time.Now()
+	activity := []otlp.Span{
+		{
+			SpanID: "turn", Name: "agent.turn", Service: "example-agent", Session: "one",
+			Start: now, End: now.Add(time.Second), Attrs: map[string]string{"traces.view": "activity"},
+		},
+		{
+			SpanID: "tool", ParentID: "turn", Name: "agent.tool", Service: "example-agent", Session: "one",
+			Start: now.Add(time.Second), End: now.Add(2 * time.Second),
+			Attrs: map[string]string{"traces.view": "activity", "tool_use_id": "call-1", "tool_name": "Shell"},
+		},
+	}
+	runtime := []otlp.Span{
+		{
+			SpanID: "metrics", Name: "runtime.tool", Service: "example-agent", Session: "one",
+			Start: now.Add(500 * time.Millisecond), End: now.Add(3 * time.Second),
+			Attrs: map[string]string{"tool_use_id": "call-1", "ttft_ms": "350"},
+		},
+		{
+			SpanID: "outcome", Name: "runtime.tool.result", Service: "example-agent", Session: "one",
+			Start: now.Add(2 * time.Second), End: now.Add(4 * time.Second), Failed: true, Error: "permission denied",
+			Attrs: map[string]string{"tool_use_id": "call-1", "decision": "deny"},
+		},
+	}
+	orders := [][]otlp.Span{runtime, {runtime[1], runtime[0]}}
+	for at, order := range orders {
+		store := NewStore()
+		store.Add(append(append([]otlp.Span{}, activity...), order...))
+
+		found := store.Session("one")
+		if found == nil || len(found.Roots) != 1 || len(found.Roots[0].Children) != 1 {
+			t.Fatalf("order %d session tree = %+v", at, found)
+		}
+		tool := found.Roots[0].Children[0]
+		if !tool.Span.Failed || tool.Span.Error != "permission denied" || tool.Note != "permission denied" {
+			t.Fatalf("order %d tool outcome = %+v", at, tool)
+		}
+		if tool.Span.Attrs["ttft_ms"] != "350" || tool.Span.Attrs["decision"] != "deny" {
+			t.Fatalf("order %d tool attrs = %v", at, tool.Span.Attrs)
+		}
+		if !tool.Span.Start.Equal(now.Add(500*time.Millisecond)) || !tool.Span.End.Equal(now.Add(4*time.Second)) {
+			t.Fatalf("order %d tool interval = %s..%s", at, tool.Span.Start, tool.Span.End)
+		}
+		if len(tool.Facets) != 2 || tool.Facets[0].SpanID != "metrics" || tool.Facets[1].SpanID != "outcome" {
+			t.Fatalf("order %d facets = %+v", at, tool.Facets)
+		}
+	}
+}
+
+func TestProviderActionsControlToolLabels(t *testing.T) {
 	tests := []struct {
 		name   string
 		action string
 		want   string
 	}{
-		{name: "apply_patch", want: "Edit"},
-		{name: "Edit", want: "Edit"},
-		{name: "Bash", want: "Shell"},
-		{name: "web.search", want: "Search"},
+		{name: "private-edit", action: "edit", want: "Edit"},
+		{name: "private-shell", action: "shell", want: "Shell"},
+		{name: "private-search", action: "search", want: "Search"},
 		{name: "custom_tool", action: "browse", want: "Browse"},
+		{name: "unmapped", want: "unmapped"},
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
@@ -53,16 +103,34 @@ func TestToolNamesShareActionLabels(t *testing.T) {
 	}
 }
 
+func TestNativeOperationSuffixesAssignGenericRoles(t *testing.T) {
+	tests := []struct {
+		name string
+		want Role
+	}{
+		{name: "runtime.interaction", want: RoleTurn},
+		{name: "runtime.llm_request", want: RoleModel},
+		{name: "runtime.tool", want: RoleTool},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			if got := describe(otlp.Span{Name: test.name, Attrs: map[string]string{}}).Role; got != test.want {
+				t.Fatalf("role = %q, want %q", got, test.want)
+			}
+		})
+	}
+}
+
 func TestSessionsReturnsStableSnapshots(t *testing.T) {
 	now := time.Now()
 	store := NewStore()
 	store.Add([]otlp.Span{{
-		SpanID: "one", Name: "agent.turn", Service: "claude-code", Session: "run",
+		SpanID: "one", Name: "agent.turn", Service: "example-agent", Session: "run",
 		Start: now, End: now, Attrs: map[string]string{"traces.view": "activity"},
 	}})
 	first := store.Sessions()[0]
 	store.Add([]otlp.Span{{
-		SpanID: "two", ParentID: "one", Name: "agent.tool", Service: "claude-code", Session: "run",
+		SpanID: "two", ParentID: "one", Name: "agent.tool", Service: "example-agent", Session: "run",
 		Start: now, End: now, Attrs: map[string]string{"traces.view": "activity"},
 	}})
 	second := store.Sessions()[0]

@@ -6,6 +6,7 @@ import (
 	"strconv"
 	"strings"
 	"testing"
+	"text/template"
 	"unicode/utf8"
 
 	"github.com/charmbracelet/bubbles/viewport"
@@ -18,7 +19,12 @@ import (
 )
 
 func TestChangesTabRendersEditOutput(t *testing.T) {
-	patch := "## internal/file.go\n\n@@ -1 +1 @@\n-old\n+new\n"
+	patch := `## internal/file.go
+
+@@ -1 +1 @@
+-old
++new
+`
 	model := Model{pane: viewport.New(100, 20)}
 	out := model.tabChanges(row{label: "Edit", node: &session.Node{Output: patch}})
 	if !strings.Contains(out, "file.go") || !strings.Contains(out, "+1") || !strings.Contains(out, "-1") {
@@ -26,16 +32,38 @@ func TestChangesTabRendersEditOutput(t *testing.T) {
 	}
 }
 
+func TestDiffRendererFallsBackWithoutProvider(t *testing.T) {
+	t.Setenv("XDG_CACHE_HOME", t.TempDir())
+	patch := `--- a/file.go
++++ b/file.go
+@@ -1 +1 @@
+-old
++new
+`
+	out := newDiffRenderer().render(patch, 80)
+	if !strings.Contains(out, "old") || !strings.Contains(out, "new") {
+		t.Fatalf("fallback output:\n%s", out)
+	}
+}
+
 func TestDiffProviderCachesByContentAndWidth(t *testing.T) {
 	dir := t.TempDir()
 	counter := filepath.Join(dir, "calls")
 	provider := filepath.Join(dir, "provider")
-	script := "#!/bin/sh\nprintf x >> \"" + counter + "\"\nprintf 'provider view\\n'\n"
+	script := renderTestTemplate(t, "diff provider", `#!/bin/sh
+printf x >> "{{ .Counter }}"
+printf 'provider view\n'
+`, struct{ Counter string }{Counter: counter})
 	if err := os.WriteFile(provider, []byte(script), 0o700); err != nil {
 		t.Fatal(err)
 	}
 	renderer := newDiffRenderer(diffProvider("test", []string{provider}, nil))
-	patch := "--- a/file.go\n+++ b/file.go\n@@ -1 +1 @@\n-old\n+new\n"
+	patch := `--- a/file.go
++++ b/file.go
+@@ -1 +1 @@
+-old
++new
+`
 	if first, second := renderer.render(patch, 80), renderer.render(patch, 80); first != second || first != "provider view" {
 		t.Fatalf("renders = %q and %q", first, second)
 	}
@@ -48,13 +76,39 @@ func TestDiffProviderCachesByContentAndWidth(t *testing.T) {
 	}
 }
 
-func TestDiffProviderAcceptsGitDifftoolArguments(t *testing.T) {
+func TestDiffProviderReceivesTwoFileArguments(t *testing.T) {
 	t.Setenv("XDG_CACHE_HOME", t.TempDir())
-	patch := "diff --git a/file.go b/file.go\n--- a/file.go\n+++ b/file.go\n@@ -1 +1 @@\n-old\n+new\n"
-	renderer := newDiffRenderer(diffProvider("git", []string{"git"}, []string{"diff", "--no-index", "--color=never", "--", "{{ .Local }}", "{{ .Remote }}"}))
+	directory := t.TempDir()
+	provider := filepath.Join(directory, "provider")
+	script := `#!/bin/sh
+set -eu
+test -f "$1"
+test -f "$2"
+test "$3" = "file.go"
+test "$4" = "80"
+test "$5" = "never"
+printf -- '-'
+cat "$1"
+printf -- '+'
+cat "$2"
+`
+	if err := os.WriteFile(provider, []byte(script), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	patch := `--- a/file.go
++++ b/file.go
+@@ -1 +1 @@
+-old
++new
+`
+	configured := diffProvider("test", []string{provider}, []string{
+		"{{ .Local }}", "{{ .Remote }}", "{{ .Merged }}", "{{ .Width }}", "{{ .Color }}",
+	})
+	configured.Color = "never"
+	renderer := newDiffRenderer(configured)
 	out := renderer.render(patch, 80)
 	if !strings.Contains(out, "-old") || !strings.Contains(out, "+new") {
-		t.Fatalf("difftool output:\n%s", out)
+		t.Fatalf("provider output:\n%s", out)
 	}
 }
 
@@ -70,9 +124,14 @@ func diffProvider(name string, command, argv []string) *source.Provider {
 
 func TestInspectorDetectsStructuredOutput(t *testing.T) {
 	for name, input := range map[string]string{
-		"json":       `{"ok":true,"count":2}`,
-		"json lines": "{\"ok\":true}\n{\"ok\":false}",
-		"diff":       "--- old\n+++ new\n@@ -1 +1 @@\n-old\n+new",
+		"json": `{"ok":true,"count":2}`,
+		"json lines": `{"ok":true}
+{"ok":false}`,
+		"diff": `--- old
++++ new
+@@ -1 +1 @@
+-old
++new`,
 	} {
 		if got := detectSyntax(input, ""); got == "" {
 			t.Errorf("%s syntax was not detected", name)
@@ -103,7 +162,8 @@ func inspectorWithOutput(size int) Model {
 }
 
 func inspectorWithOutputs(size, count int) Model {
-	line := `{"event":"build","ok":true,"path":"src/main.go"}` + "\n"
+	line := `{"event":"build","ok":true,"path":"src/main.go"}
+`
 	output := strings.Repeat(line, size/len(line)+1)[:size]
 	rows, visible := make([]row, count), make([]int, count)
 	for i := range count {
@@ -230,12 +290,30 @@ func TestInspectorTabNameSurvivesAvailabilityChange(t *testing.T) {
 	m = m.refresh()
 	m.pane.SetYOffset(10)
 	before := m.paneSelect
-	m.rows[0].node.Patch = "--- old\n+++ new\n@@ -1 +1 @@\n-old\n+new\n"
+	m.rows[0].node.Patch = `--- old
++++ new
+@@ -1 +1 @@
+-old
++new
+`
 	m.dataRev++
 	m = m.refresh()
 	if m.tabName() != "body" || m.paneSelect != before || m.pane.YOffset != 10 {
 		t.Fatalf("added tab selected %q with identity %q and offset %d", m.tabName(), m.paneSelect, m.pane.YOffset)
 	}
+}
+
+func renderTestTemplate(t *testing.T, name, source string, data any) string {
+	t.Helper()
+	parsed, err := template.New(name).Option("missingkey=error").Parse(source)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var output strings.Builder
+	if err := parsed.Execute(&output, data); err != nil {
+		t.Fatal(err)
+	}
+	return output.String()
 }
 
 func TestInspectorSessionChangeResetsState(t *testing.T) {

@@ -25,28 +25,28 @@ func TestActorLanes(t *testing.T) {
 	now := time.Now()
 	store := session.NewStore()
 	store.Add([]otlp.Span{
-		{SpanID: "turn", Name: "agent.turn", Service: "claude-code", Session: "one",
+		{SpanID: "turn", Name: "agent.turn", Service: "example-agent", Session: "one",
 			Start: now, End: now.Add(time.Minute),
 			Attrs: activity(map[string]string{"user_prompt": "go"})},
-		{SpanID: "bash", ParentID: "turn", Name: "agent.tool", Service: "claude-code", Session: "one",
+		{SpanID: "bash", ParentID: "turn", Name: "agent.tool", Service: "example-agent", Session: "one",
 			Start: now, End: now, Attrs: activity(map[string]string{"tool_name": "Bash"})},
 		// A subagent the main thread spawned.
-		{SpanID: "task", ParentID: "turn", Name: "agent.tool", Service: "claude-code", Session: "one",
+		{SpanID: "task", ParentID: "turn", Name: "agent.tool", Service: "example-agent", Session: "one",
 			Start: now, End: now,
-			Attrs: activity(map[string]string{"tool_name": "Agent", "subagent_type": "Explore"})},
-		{SpanID: "inner", ParentID: "task", Name: "agent.tool", Service: "claude-code", Session: "one",
+			Attrs: activity(map[string]string{"tool_name": "Agent", "traces.action": "delegate", "subagent_type": "Explore"})},
+		{SpanID: "inner", ParentID: "task", Name: "agent.tool", Service: "example-agent", Session: "one",
 			Start: now, End: now, Attrs: activity(map[string]string{"tool_name": "Grep"})},
 		// A teammate, which names itself.
-		{SpanID: "mate", ParentID: "turn", Name: "agent.tool", Service: "claude-code", Session: "one",
+		{SpanID: "mate", ParentID: "turn", Name: "agent.tool", Service: "example-agent", Session: "one",
 			Start: now, End: now,
-			Attrs: activity(map[string]string{"tool_name": "Agent", "agent.name": "reviewer"})},
-		{SpanID: "mateWork", ParentID: "mate", Name: "agent.tool", Service: "claude-code", Session: "one",
+			Attrs: activity(map[string]string{"tool_name": "Agent", "traces.action": "delegate", "agent.name": "reviewer"})},
+		{SpanID: "mateWork", ParentID: "mate", Name: "agent.tool", Service: "example-agent", Session: "one",
 			Start: now, End: now, Attrs: activity(map[string]string{"tool_name": "Read"})},
 		// A subagent of that teammate.
-		{SpanID: "mateSub", ParentID: "mate", Name: "agent.tool", Service: "claude-code", Session: "one",
+		{SpanID: "mateSub", ParentID: "mate", Name: "agent.tool", Service: "example-agent", Session: "one",
 			Start: now, End: now,
-			Attrs: activity(map[string]string{"tool_name": "Agent", "subagent_type": "oracle"})},
-		{SpanID: "deep", ParentID: "mateSub", Name: "agent.tool", Service: "claude-code", Session: "one",
+			Attrs: activity(map[string]string{"tool_name": "Agent", "traces.action": "delegate", "subagent_type": "oracle"})},
+		{SpanID: "deep", ParentID: "mateSub", Name: "agent.tool", Service: "example-agent", Session: "one",
 			Start: now, End: now, Attrs: activity(map[string]string{"tool_name": "Bash"})},
 	})
 	m := New(store, "one", "test")
@@ -76,14 +76,14 @@ func TestActorLanes(t *testing.T) {
 	}
 }
 
-func TestActorUsesRolloutAgentPath(t *testing.T) {
+func TestActorUsesProviderAgentPath(t *testing.T) {
 	now := time.Now()
 	store := session.NewStore()
 	store.Add([]otlp.Span{
-		{SpanID: "turn", Name: "agent.turn", Service: "codex_cli_rs", Session: "one",
+		{SpanID: "turn", Name: "agent.turn", Service: "example-agent", Session: "one",
 			Start: now, End: now.Add(time.Minute),
 			Attrs: activity(map[string]string{"agent.path": "main/reviewer"})},
-		{SpanID: "shell", ParentID: "turn", Name: "agent.tool", Service: "codex_cli_rs", Session: "one",
+		{SpanID: "shell", ParentID: "turn", Name: "agent.tool", Service: "example-agent", Session: "one",
 			Start: now, End: now,
 			Attrs: activity(map[string]string{"tool_name": "Shell", "agent.path": "main/reviewer"})},
 	})

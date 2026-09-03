@@ -81,7 +81,7 @@ func TestReadBuildsTheTree(t *testing.T) {
 	if tool.ParentID != "req_1" {
 		t.Errorf("tool parent = %q, want req_1", tool.ParentID)
 	}
-	if tool.Attrs["tool_name"] != "Bash" || tool.Attrs["full_command"] != "ls | wc -l" {
+	if tool.Attrs["tool_name"] != "Bash" || tool.Attrs["full_command"] != "ls | wc -l" || tool.Attrs["traces.action"] != "shell" {
 		t.Errorf("tool args not read: %v", tool.Attrs)
 	}
 	if got := tool.End.Sub(tool.Start); got != 2*time.Second {
@@ -98,6 +98,20 @@ func TestReadBuildsTheTree(t *testing.T) {
 	}
 	if turns != 1 {
 		t.Errorf("turns = %d, want 1", turns)
+	}
+}
+
+func TestActionOfOwnsToolVocabulary(t *testing.T) {
+	for tool, want := range map[string]string{
+		"Agent": "delegate", "Edit": "edit", "Bash": "shell",
+		"Grep": "search", "Read": "read", "update_plan": "plan",
+	} {
+		if got := actionOf(tool); got != want {
+			t.Errorf("actionOf(%q) = %q, want %q", tool, got, want)
+		}
+	}
+	if got := actionOf("private-tool"); got != "" {
+		t.Errorf("unknown action = %q", got)
 	}
 }
 

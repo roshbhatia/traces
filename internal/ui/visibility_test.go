@@ -20,12 +20,12 @@ func foldable(t *testing.T) Model {
 	now := time.Now()
 	store := session.NewStore()
 	store.Add([]otlp.Span{
-		{SpanID: "turn", Name: "agent.turn", Service: "claude-code", Session: "one",
+		{SpanID: "turn", Name: "agent.turn", Service: "example-agent", Session: "one",
 			Start: now, End: now.Add(time.Second),
 			Attrs: map[string]string{"traces.view": "activity", "user_prompt": "go"}},
-		{SpanID: "a", ParentID: "turn", Name: "agent.tool", Service: "claude-code", Session: "one",
+		{SpanID: "a", ParentID: "turn", Name: "agent.tool", Service: "example-agent", Session: "one",
 			Start: now, End: now, Attrs: map[string]string{"traces.view": "activity", "tool_name": "Bash"}},
-		{SpanID: "b", ParentID: "turn", Name: "agent.tool", Service: "claude-code", Session: "one",
+		{SpanID: "b", ParentID: "turn", Name: "agent.tool", Service: "example-agent", Session: "one",
 			Start: now, End: now, Attrs: map[string]string{"traces.view": "activity", "tool_name": "Read"}},
 	})
 	m := New(store, "one", "test")
@@ -300,7 +300,12 @@ func TestTimelineWheelDoesNotScrollInspector(t *testing.T) {
 }
 
 func TestInspectorTabsAcceptTopAndSideClicks(t *testing.T) {
-	patch := "--- file.go\n+++ file.go\n@@ -1 +1 @@\n-old\n+new\n"
+	patch := `--- file.go
++++ file.go
+@@ -1 +1 @@
+-old
++new
+`
 	for _, place := range []placement{placeTop, placeLeft, placeRight} {
 		node := &session.Node{
 			Output: patch,
@@ -335,7 +340,7 @@ func TestLiveReloadKeepsSelectedSpan(t *testing.T) {
 	m.follow = false
 	root := m.rows[0].node
 	m = applyBatch(t, m, otlp.Batch{Spans: []otlp.Span{{
-		SpanID: "before", ParentID: "turn", Name: "agent.tool", Service: "claude-code", Session: "one",
+		SpanID: "before", ParentID: "turn", Name: "agent.tool", Service: "example-agent", Session: "one",
 		Start: root.Start().Add(time.Nanosecond), End: root.Start().Add(2 * time.Nanosecond),
 		Attrs: map[string]string{"traces.view": "activity", "tool_name": "Read"},
 	}}})
@@ -355,7 +360,7 @@ func TestLiveReloadRebasesVisualAnchor(t *testing.T) {
 	m = next.(Model)
 	root := m.rows[0].node
 	m = applyBatch(t, m, otlp.Batch{Spans: []otlp.Span{{
-		SpanID: "before", ParentID: "turn", Name: "agent.tool", Service: "claude-code", Session: "one",
+		SpanID: "before", ParentID: "turn", Name: "agent.tool", Service: "example-agent", Session: "one",
 		Start: root.Start().Add(-time.Nanosecond), End: root.Start(),
 		Attrs: map[string]string{"traces.view": "activity", "tool_name": "Read"},
 	}}})
@@ -368,7 +373,7 @@ func TestLiveBatchRebuildRunsInCommand(t *testing.T) {
 	m := foldable(t)
 	root := m.rows[0].node
 	batch := otlp.Batch{Spans: []otlp.Span{{
-		SpanID: "later", ParentID: "turn", Name: "agent.tool", Service: "claude-code", Session: "one",
+		SpanID: "later", ParentID: "turn", Name: "agent.tool", Service: "example-agent", Session: "one",
 		Start: root.Start().Add(time.Millisecond), End: root.Start().Add(2 * time.Millisecond),
 		Attrs: map[string]string{"traces.view": "activity", "tool_name": "Read"},
 	}}}
@@ -389,7 +394,7 @@ func TestLiveBatchRebuildSerializesPendingBatches(t *testing.T) {
 	root := m.rows[0].node
 	batch := func(id string, offset time.Duration) BatchMsg {
 		return BatchMsg(otlp.Batch{Spans: []otlp.Span{{
-			SpanID: id, ParentID: "turn", Name: "agent.tool", Service: "claude-code", Session: "one",
+			SpanID: id, ParentID: "turn", Name: "agent.tool", Service: "example-agent", Session: "one",
 			Start: root.Start().Add(offset), End: root.Start().Add(offset + time.Nanosecond),
 			Attrs: map[string]string{"traces.view": "activity", "tool_name": "Read"},
 		}}})
@@ -432,7 +437,7 @@ func liveModelWithRows(b *testing.B, count int) Model {
 	for i := range spans {
 		spans[i] = otlp.Span{
 			SpanID: strconv.Itoa(i), ParentID: "0", Name: "agent.tool",
-			Service: "claude-code", Session: "one", Start: now.Add(time.Duration(i)), End: now.Add(time.Duration(i)), Attrs: attrs,
+			Service: "example-agent", Session: "one", Start: now.Add(time.Duration(i)), End: now.Add(time.Duration(i)), Attrs: attrs,
 		}
 	}
 	spans[0].ParentID, spans[0].Name = "", "agent.turn"
@@ -444,7 +449,7 @@ func liveModelWithRows(b *testing.B, count int) Model {
 func BenchmarkLiveBatchQueue35000Rows(b *testing.B) {
 	m := liveModelWithRows(b, 35000)
 	batch := otlp.Batch{Spans: []otlp.Span{{
-		SpanID: "new", ParentID: "0", Name: "agent.tool", Service: "claude-code", Session: "one",
+		SpanID: "new", ParentID: "0", Name: "agent.tool", Service: "example-agent", Session: "one",
 		Start: time.Now(), End: time.Now(), Attrs: map[string]string{"traces.view": "activity"},
 	}}}
 	b.ReportAllocs()
@@ -460,7 +465,7 @@ func BenchmarkLiveBatchQueue35000Rows(b *testing.B) {
 func BenchmarkLiveBatchBuild35000Rows(b *testing.B) {
 	m := liveModelWithRows(b, 35000)
 	batch := otlp.Batch{Spans: []otlp.Span{{
-		SpanID: "new", ParentID: "0", Name: "agent.tool", Service: "claude-code", Session: "one",
+		SpanID: "new", ParentID: "0", Name: "agent.tool", Service: "example-agent", Session: "one",
 		Start: time.Now(), End: time.Now(), Attrs: map[string]string{"traces.view": "activity"},
 	}}}
 	b.ReportAllocs()
@@ -485,12 +490,12 @@ func TestRollupCountsARequestOnce(t *testing.T) {
 	}
 	store := session.NewStore()
 	store.Add([]otlp.Span{
-		{SpanID: "turn", Name: "agent.turn", Service: "claude-code", Session: "one",
+		{SpanID: "turn", Name: "agent.turn", Service: "example-agent", Session: "one",
 			Start: now, End: now.Add(time.Second),
 			Attrs: map[string]string{"traces.view": "activity", "user_prompt": "go"}},
-		{SpanID: "req_1", ParentID: "turn", Name: "agent.model", Service: "claude-code", Session: "one",
+		{SpanID: "req_1", ParentID: "turn", Name: "agent.model", Service: "example-agent", Session: "one",
 			Start: now, End: now, Attrs: usage},
-		{SpanID: "t1", ParentID: "req_1", Name: "agent.tool", Service: "claude-code", Session: "one",
+		{SpanID: "t1", ParentID: "req_1", Name: "agent.tool", Service: "example-agent", Session: "one",
 			Start: now, End: now, Attrs: tool},
 	})
 	m := New(store, "one", "test")

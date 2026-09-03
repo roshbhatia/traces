@@ -3,6 +3,7 @@ package ui
 import (
 	"strconv"
 	"strings"
+	"text/template"
 	"time"
 
 	"github.com/roshbhatia/traces/internal/session"
@@ -39,7 +40,7 @@ func kindOf(node *session.Node) kind {
 	case strings.HasPrefix(node.Label, "/") || strings.Contains(name, "skill"):
 		return kindSkill
 	}
-	// Anything left is a plain step. It was kindHook, which made every amp HTTP
+	// Anything left is a plain step. It was kindHook, which made every HTTP
 	// fetch read as `@hook` in the actor column and print "configured in ``" in
 	// the inspector.
 	return kindTool
@@ -113,8 +114,7 @@ func number(attrs map[string]string, keys ...string) int {
 		if n, err := strconv.Atoi(text); err == nil {
 			return n
 		}
-		// A token count arrives as a float when the source is Observe rather
-		// than the collector, because JSON has one number type.
+		// A token count from a JSON-backed source may arrive as a float.
 		if f, err := strconv.ParseFloat(text, 64); err == nil {
 			return int(f)
 		}
@@ -153,8 +153,8 @@ func rowOf(node *session.Node, depth int, lane string) row {
 	}
 	out.preview = Line(node)
 	// The span column already carries the label, so a preview that repeats it
-	// spends the widest column on a second copy. Every codex row read `auth`
-	// beside `auth`, and every amp row read `fetch /api/…` beside the same URL.
+	// spends the widest column on a second copy. Every runtime row read `auth`
+	// beside `auth`, and every fetch row repeated the same URL.
 	if out.preview == out.label || strings.HasPrefix(out.preview, out.label) {
 		out.preview = strings.TrimSpace(strings.TrimPrefix(out.preview, out.label))
 	}
@@ -212,7 +212,7 @@ func kidNames(node *session.Node) string {
 
 // preview is the one line of text under the label. The attribute that carries
 // it differs per harness, so the first one present wins; full_command is where
-// Claude Code puts a tool's real argument.
+// Providers put a tool's real argument in one of these common attributes.
 func preview(node *session.Node) string {
 	if text := node.Span.Attrs["full_command"]; text != "" {
 		return oneLine(trimLead(text))
@@ -229,7 +229,7 @@ func preview(node *session.Node) string {
 		return oneLine(node.Span.Error)
 	}
 	// The label already carries what the span name says, and for a tool row it
-	// says more: the tool's own name. Repeating claude_code.tool on every row
+	// says more: the tool's own name. Repeating agent.tool on every row
 	// filled the column with one string and told the reader nothing.
 	if node.Label == node.Span.Name {
 		return node.Span.Name
@@ -341,7 +341,7 @@ func (r row) raw() string {
 	parts := []string{}
 	add := func(head, body string) {
 		if body != "" {
-			parts = append(parts, "## "+head+"\n\n"+body)
+			parts = append(parts, renderText(sectionTemplate, sectionView{Head: head, Body: body}))
 		}
 	}
 	add("Prompt", r.node.Prompt)
@@ -356,6 +356,23 @@ func (r row) raw() string {
 		return r.preview
 	}
 	return strings.Join(parts, "\n\n")
+}
+
+type sectionView struct {
+	Head string
+	Body string
+}
+
+var sectionTemplate = template.Must(template.New("inspector section").Option("missingkey=error").Parse(`## {{ .Head }}
+
+{{ .Body }}`))
+
+func renderText(parsed *template.Template, data any) string {
+	var output strings.Builder
+	if err := parsed.Execute(&output, data); err != nil {
+		panic(err)
+	}
+	return output.String()
 }
 
 // command is the row's argument as it was written, newlines and all. The row's

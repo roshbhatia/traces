@@ -30,9 +30,8 @@ type Span struct {
 
 func (s Span) Duration() time.Duration { return s.End.Sub(s.Start) }
 
-// Record is one log record. A harness puts on a log what it cannot put on a
-// span: Claude Code emits the prompt text as claude_code.user_prompt rather
-// than as an attribute of the turn, so the turn row has no text without this.
+// Record is one log record. A source puts on a log what it cannot put on a
+// span, such as the prompt text that opens a turn.
 type Record struct {
 	TraceID string
 	SpanID  string
@@ -107,14 +106,12 @@ type wireSpan struct {
 }
 
 type wireRecord struct {
-	TraceID   string `json:"traceId"`
-	SpanID    string `json:"spanId"`
-	Time      string `json:"timeUnixNano"`
-	Observed  string `json:"observedTimeUnixNano"`
-	EventName string `json:"eventName"`
-	Body      struct {
-		StringValue string `json:"stringValue"`
-	} `json:"body"`
+	TraceID    string     `json:"traceId"`
+	SpanID     string     `json:"spanId"`
+	Time       string     `json:"timeUnixNano"`
+	Observed   string     `json:"observedTimeUnixNano"`
+	EventName  string     `json:"eventName"`
+	Body       value      `json:"body"`
 	Attributes []keyValue `json:"attributes"`
 }
 
@@ -185,9 +182,9 @@ func Decode(line []byte) Batch {
 					TraceID: raw.TraceID,
 					SpanID:  raw.SpanID,
 					Event:   event,
-					Body:    raw.Body.StringValue,
+					Body:    raw.Body.String(),
 					Service: attrs["service.name"],
-					Session: sessionID(attrs),
+					Session: SessionID(attrs),
 					At:      at,
 					Attrs:   attrs,
 				})
@@ -216,7 +213,7 @@ func Decode(line []byte) Batch {
 					ParentID: raw.ParentSpanID,
 					Name:     raw.Name,
 					Service:  attrs["service.name"],
-					Session:  sessionID(attrs),
+					Session:  SessionID(attrs),
 					Start:    stamp(raw.Start),
 					End:      stamp(raw.End),
 					Attrs:    attrs,
@@ -235,10 +232,17 @@ func Decode(line []byte) Batch {
 	return out
 }
 
-func sessionID(attrs map[string]string) string {
-	for _, key := range []string{"session.id", "conversation.id", "thread_id", "ai.telemetry.metadata.sessionId"} {
-		if attrs[key] != "" {
-			return attrs[key]
+// SessionID returns the first session identity carried by common telemetry
+// protocols. These keys describe wire formats, not a particular provider.
+func SessionID(attrs map[string]string) string {
+	for _, key := range []string{
+		"session.id",
+		"conversation.id",
+		"thread_id",
+		"ai.telemetry.metadata.sessionId",
+	} {
+		if id := attrs[key]; id != "" {
+			return id
 		}
 	}
 	return ""

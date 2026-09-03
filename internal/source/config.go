@@ -11,7 +11,7 @@ import (
 	sharedconfig "github.com/roshbhatia/go-utils/config"
 )
 
-// Diff configures a Git-compatible difftool command.
+// Diff configures an optional two-file rendering provider.
 type Diff struct {
 	Provider string `json:"provider,omitempty" yaml:"provider"`
 }
@@ -29,7 +29,7 @@ type Settings struct {
 	Sources   map[string][]string `json:"sources,omitempty" yaml:"sources"`
 }
 
-// Default keeps the core independent from every harness and difftool.
+// Default keeps the core independent from every activity and rendering source.
 func Default() Settings {
 	return Settings{
 		Color: "auto",

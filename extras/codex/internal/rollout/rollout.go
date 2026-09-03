@@ -5,7 +5,6 @@ import (
 	"bufio"
 	"bytes"
 	"encoding/json"
-	"fmt"
 	"io/fs"
 	"net/url"
 	"os"
@@ -13,6 +12,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"text/template"
 	"time"
 
 	"github.com/roshbhatia/traces/internal/otlp"
@@ -475,11 +475,29 @@ func changes(in map[string]change, cwd string) ([]string, int, int, string) {
 		}
 		body := one.UnifiedDiff
 		if !strings.Contains(body, "\n+++ ") {
-			body = fmt.Sprintf("--- %s\n+++ %s\n%s", oldPath, newPath, body)
+			body = renderPatch(patchTemplate, patchView{OldPath: oldPath, NewPath: newPath, Body: body})
 		}
 		parts = append(parts, body)
 	}
 	return paths, added, removed, strings.Join(parts, "\n")
+}
+
+type patchView struct {
+	OldPath string
+	NewPath string
+	Body    string
+}
+
+var patchTemplate = template.Must(template.New("change patch").Option("missingkey=error").Parse(`--- {{ .OldPath }}
++++ {{ .NewPath }}
+{{ .Body }}`))
+
+func renderPatch(parsed *template.Template, data any) string {
+	var output strings.Builder
+	if err := parsed.Execute(&output, data); err != nil {
+		panic(err)
+	}
+	return output.String()
 }
 
 func relative(cwd, path string) string {

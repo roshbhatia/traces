@@ -12,7 +12,7 @@ import (
 	"unicode"
 
 	"github.com/roshbhatia/go-utils/workspace"
-	"github.com/roshbhatia/traces/extras/internal/transcript"
+	"github.com/roshbhatia/traces/extras/claude/internal/transcript"
 	"github.com/roshbhatia/traces/internal/source"
 )
 

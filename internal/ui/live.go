@@ -11,6 +11,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"text/template"
 	"time"
 	"unicode/utf8"
 
@@ -1519,7 +1520,7 @@ func (m Model) columns(width int) (actor, text, meta, track int) {
 	}
 	// The diff cell is the first of the three to go. Tokens and time answer a
 	// question every row has an answer to; churn only applies to a write, and a
-	// Claude Code trace carries none at all: 11 columns of header over 11
+	// A trace may carry none at all: 11 columns of header over 11
 	// columns of blank, on every row.
 	meta = metaTight
 	if width >= minTextW+metaCol+2+actor {
@@ -2117,13 +2118,19 @@ func normalizePatch(patch string) string {
 	b := &strings.Builder{}
 	for _, line := range strings.Split(patch, "\n") {
 		if path := strings.TrimSpace(strings.TrimPrefix(line, "## ")); strings.HasPrefix(line, "## ") && path != "" {
-			fmt.Fprintf(b, "--- %s\n+++ %s\n", path, path)
+			b.WriteString(renderText(patchHeaderTemplate, patchHeaderView{Path: path}))
 			continue
 		}
 		b.WriteString(line + "\n")
 	}
 	return b.String()
 }
+
+type patchHeaderView struct{ Path string }
+
+var patchHeaderTemplate = template.Must(template.New("patch header").Option("missingkey=error").Parse(`--- {{ .Path }}
++++ {{ .Path }}
+`))
 
 func (m Model) tabsFor() []paneTab {
 	if m.markTabsSet {
@@ -2176,7 +2183,7 @@ func (m Model) moveTab(by int) Model {
 // tabBody is the content half of the pane: what was asked, what was written,
 // what came back. It names the section rather than the row, because the row's
 // own name is in the tree, in the pane title and in the pinned strip, and a
-// fourth copy of "claude-opus-5" told the reader nothing they had not read.
+// A fourth copy of the model name told the reader nothing they had not read.
 //
 // No attribute appears here. The attrs tab holds all of them, and the table
 // this used to print restated eight of them one tab away.
@@ -2374,11 +2381,23 @@ func (m Model) codeLines(text, language string, width int) []string {
 		for strings.Contains(text, fence) {
 			fence += "`"
 		}
-		colored = m.rendered(fence + language + "\n" + text + "\n" + fence)
+		colored = m.rendered(renderText(codeFenceTemplate, codeFenceView{
+			Fence: fence, Language: language, Text: text,
+		}))
 	}
 	wrapped := ansi.Wrap(strings.TrimRight(colored, "\n"), width, " /,;")
 	return strings.Split(wrapped, "\n")
 }
+
+type codeFenceView struct {
+	Fence    string
+	Language string
+	Text     string
+}
+
+var codeFenceTemplate = template.Must(template.New("code fence").Option("missingkey=error").Parse(`{{ .Fence }}{{ .Language }}
+{{ .Text }}
+{{ .Fence }}`))
 
 // bodyLines wraps prose and leaves code alone but for the width, because a
 // reflowed command is a command that no longer runs.
@@ -3017,28 +3036,28 @@ func (m Model) View() string {
 			// a broken source rather than as a directory with no run in view.
 			waiting = "no run from this directory in " + m.source + "; -all shows every run"
 		}
-		return m.head() + "\n\n" + faint.Render(waiting) + "\n\n" + m.footer()
+		return strings.Join([]string{m.head(), faint.Render(waiting), m.footer()}, "\n\n")
 	}
 	inner := max(1, m.treeWidth()-2)
 	tree := boxNamed(fmt.Sprintf("trace  %d shown of %d  \u00b7  %s", len(m.visible()), len(m.rows), m.runFor()),
-		inner, m.treeHead(inner)+"\n"+m.treeBody(inner, m.bodyHeight()), !m.onPane())
+		inner, strings.Join([]string{m.treeHead(inner), m.treeBody(inner, m.bodyHeight())}, "\n"), !m.onPane())
 	timeline := m.strip(m.width)
 
 	// A blank row separates the timeline from each box. The timeline remains
 	// between the trace and a vertical inspector.
-	main := tree + "\n\n" + timeline
+	main := strings.Join([]string{tree, timeline}, "\n\n")
 	if p := m.placeAt(); p != placeHidden {
 		pw := max(1, m.detailWidth()-2)
 		pane := boxLive(m.tabTop(pw), pw, m.paneView(pw), m.onPane())
 		switch p {
 		case placeBottom:
-			main = withGrip(tree, inner) + "\n\n" + timeline + "\n\n" + pane
+			main = strings.Join([]string{withGrip(tree, inner), timeline, pane}, "\n\n")
 		case placeTop:
-			main = pane + "\n\n" + timeline + "\n\n" + tree
+			main = strings.Join([]string{pane, timeline, tree}, "\n\n")
 		case placeLeft:
-			main = lipgloss.JoinHorizontal(lipgloss.Top, pane, tree) + "\n\n" + timeline
+			main = strings.Join([]string{lipgloss.JoinHorizontal(lipgloss.Top, pane, tree), timeline}, "\n\n")
 		case placeRight:
-			main = lipgloss.JoinHorizontal(lipgloss.Top, tree, pane) + "\n\n" + timeline
+			main = strings.Join([]string{lipgloss.JoinHorizontal(lipgloss.Top, tree, pane), timeline}, "\n\n")
 		}
 	}
 
@@ -3348,7 +3367,8 @@ func (m Model) debounce() (tea.Model, tea.Cmd) {
 // competing with a tree for the same rows reads as neither.
 func (m Model) viewPick() string {
 	b := &strings.Builder{}
-	b.WriteString(title.Render("traces") + dim.Render("  attach to a session") + "\n\n")
+	b.WriteString(title.Render("traces") + dim.Render("  attach to a session"))
+	b.WriteString("\n\n")
 	for i, one := range m.list {
 		mark := "  "
 		style := plain

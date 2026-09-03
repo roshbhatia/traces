@@ -18,6 +18,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"text/template"
 	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
@@ -26,7 +27,6 @@ import (
 
 	"github.com/roshbhatia/go-utils/completion"
 	"github.com/roshbhatia/go-utils/paths"
-	sharedprovider "github.com/roshbhatia/go-utils/provider"
 	"github.com/roshbhatia/traces/internal/otlp"
 	"github.com/roshbhatia/traces/internal/session"
 	"github.com/roshbhatia/traces/internal/source"
@@ -83,8 +83,8 @@ func main() {
 	}
 
 	// traces opens on the work in front of the reader. Inside an agent session
-	// that is the session itself, and outside one it is whatever ran in this
-	// directory, which Claude Code already records per directory.
+	// that is the session itself, and outside one it is whatever a provider found
+	// for this directory.
 	scope := []string{}
 	directory := ""
 	if !*all && *pinned == "" {
@@ -106,6 +106,9 @@ func main() {
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "traces: skipped diff provider: %v\n", err)
 	}
+	if diffProvider != nil {
+		diffProvider.Color = *color
+	}
 	for _, one := range providers {
 		one.Session = which
 		one.Directory = directory
@@ -116,7 +119,7 @@ func main() {
 		path = paths.OtelTelemetry()
 	}
 	// A dash is the shell's own name for standard input, so a provider or a
-	// saved capture pipes straight in: `traces-observe --since 1h | traces --once`.
+	// saved capture pipes straight in: `activity-reader | traces --once`.
 	if path == "-" {
 		path = ""
 	}
@@ -176,10 +179,25 @@ func commandMetadata() completion.Command {
 			Name:        "provider",
 			Description: "Inspect and validate external providers",
 			Subcommands: []completion.Command{
-				{Name: "list", Description: "List discovered providers", Flags: []completion.Flag{{Name: "config", Description: "YAML configuration file", Value: true}, {Name: "json", Description: "Print JSON"}}},
-				{Name: "validate", Description: "Validate provider commands and protocol output", Flags: []completion.Flag{{Name: "config", Description: "YAML configuration file", Value: true}, {Name: "json", Description: "Print JSON"}}},
+				{
+					Name:        "list",
+					Description: "List discovered providers",
+					Flags:       providerCommandFlags(),
+				},
+				{
+					Name:        "validate",
+					Description: "Validate provider commands and protocol output",
+					Flags:       providerCommandFlags(),
+				},
 			},
 		}},
+	}
+}
+
+func providerCommandFlags() []completion.Flag {
+	return []completion.Flag{
+		{Name: "config", Description: "YAML configuration file", Value: true},
+		{Name: "json", Description: "Print JSON"},
 	}
 }
 
@@ -240,7 +258,15 @@ func runProvider(args []string) {
 				actions = append(actions, action)
 			}
 			slices.Sort(actions)
-			fmt.Printf("%s\n  %s\n  source    %s\n  provides  %s\n  command   %s\n", name, description, loaded.Path, strings.Join(actions, ", "), strings.Join(manifest.Command, " "))
+			output, err := renderProviderList(providerListView{
+				Name: name, Description: description, Source: loaded.Path,
+				Provides: strings.Join(actions, ", "), Command: strings.Join(manifest.Command, " "),
+			})
+			if err != nil {
+				fmt.Fprintf(os.Stderr, "traces: render provider list: %v\n", err)
+				os.Exit(1)
+			}
+			fmt.Print(output)
 		}
 		return
 	}
@@ -256,9 +282,7 @@ func runProvider(args []string) {
 	results := make([]source.Validation, 0, len(names))
 	failed := false
 	for _, name := range names {
-		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-		result := source.Validate(ctx, name, registry[name], directory)
-		cancel()
+		result := source.Validate(context.Background(), name, registry[name], directory)
 		results = append(results, result)
 		failed = failed || result.Status != "ok"
 	}
@@ -286,6 +310,29 @@ func runProvider(args []string) {
 	}
 }
 
+type providerListView struct {
+	Name        string
+	Description string
+	Source      string
+	Provides    string
+	Command     string
+}
+
+var providerListTemplate = template.Must(template.New("provider list").Option("missingkey=error").Parse(`{{ .Name }}
+  {{ .Description }}
+  source    {{ .Source }}
+  provides  {{ .Provides }}
+  command   {{ .Command }}
+`))
+
+func renderProviderList(view providerListView) (string, error) {
+	var output strings.Builder
+	if err := providerListTemplate.Execute(&output, view); err != nil {
+		return "", err
+	}
+	return output.String(), nil
+}
+
 func runGenerate(args []string) {
 	flags := flag.NewFlagSet("traces generate", flag.ContinueOnError)
 	check := flags.Bool("check", false, "fail when generated files are stale")
@@ -302,7 +349,7 @@ func runGenerate(args []string) {
 		fmt.Fprintf(os.Stderr, "traces: %v\n", err)
 		os.Exit(1)
 	}
-	providerSchema, err := sharedprovider.Schema()
+	providerSchema, err := source.ProviderSchema()
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "traces: %v\n", err)
 		os.Exit(1)
@@ -394,7 +441,7 @@ func (s sources) name() string {
 	for _, one := range s.providers {
 		where += " and " + one.Name
 		// A source declared for one harness is read for that harness only, and
-		// a header saying only "and observe" hides which run it answered for.
+		// a header naming only the source hides which run it answered for.
 		if who := one.For(); who != "" {
 			where += "(" + who + ")"
 		}
@@ -447,8 +494,8 @@ func (s sources) read() (otlp.Batch, error) {
 	return source.DecodeAny(blob), nil
 }
 
-// keep drops the services the reader did not ask for. A prefix matches, because
-// `codex` is what a reader types for `codex_exec`.
+// keep drops the services the reader did not ask for. A prefix matches related
+// service variants without requiring their full telemetry name.
 func (s sources) keep(in otlp.Batch) otlp.Batch {
 	if s.service == "" {
 		return in
@@ -484,9 +531,7 @@ func (s sources) report(which string, scope []string, directory string, listing,
 	}
 	batch = s.keep(batch)
 	if asJSON {
-		// --json ignored --session, so `traces --session X --json` printed every
-		// span on the machine: 17447 codex runtime spans over a Claude run of
-		// 350. A filter the reader gave has to reach every output.
+		// A filter the reader gave has to reach every output, including JSON.
 		if err := source.Encode(os.Stdout, only(batch, which, scope, directory)); err != nil {
 			fmt.Fprintf(os.Stderr, "traces: %v\n", err)
 			return 1
@@ -545,9 +590,8 @@ func failed(one *session.Session) bool {
 	return false
 }
 
-// list sizes every column to the rows it holds. The widths were fixed at 12 and
-// 40 before this, and `github-copilot` and a 47 character trace key both
-// overran theirs, so each long row shifted the two columns after it.
+// list sizes every column to the rows it holds. Fixed widths let long service
+// names and trace keys shift the columns after them.
 //
 // The id column prints the short id, because that is what --session takes, and
 // the name beside it is what the harness itself called the run. A list of six
@@ -633,8 +677,7 @@ func only(batch otlp.Batch, which string, scope []string, directory string) otlp
 	}
 	for _, one := range batch.Records {
 		// A record with no session of its own belongs to this run only when its
-		// service does. Keeping every session-less record let 149 opencode and
-		// codex records into a Claude run's own output.
+		// service does.
 		if one.Session == found.ID || (one.Session == "" && one.Service == found.Service) {
 			out.Records = append(out.Records, one)
 		}

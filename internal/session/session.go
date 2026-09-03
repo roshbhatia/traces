@@ -26,32 +26,6 @@ const (
 	RoleError    Role = "error"
 )
 
-// Claude Code closes a turn's own span only when the turn ends, so its tool and
-// model children reach the collector first and stay parentless for minutes. The
-// parent id they carry is still a stable turn key, so traces groups on that id and
-// fills in the real span later. These two spans say how a tool call went, which
-// belongs on the tool row rather than under it.
-var foldedInto = map[string]bool{
-	"claude_code.tool.execution":       true,
-	"claude_code.tool.blocked_on_user": true,
-}
-
-var actionAliases = map[string]string{
-	"agent":       "delegate",
-	"apply_patch": "edit",
-	"bash":        "shell",
-	"edit":        "edit",
-	"glob":        "search",
-	"grep":        "search",
-	"read":        "read",
-	"shell":       "shell",
-	"task":        "delegate",
-	"update_plan": "plan",
-	"web.search":  "search",
-	"websearch":   "search",
-	"write":       "edit",
-}
-
 type Node struct {
 	Span  otlp.Span
 	Role  Role
@@ -106,10 +80,8 @@ func (s *Session) Title() string {
 	return s.Key
 }
 
-// Name is what a person calls this run. Claude Code writes a title for every
-// session and traces named them all by 8 characters of a uuid, so a list of six
-// sessions read as six hex strings and told the reader nothing about which was
-// which. The id stays available under Short, which is what --session takes.
+// Name is what a person calls this run. A provider may supply a human title.
+// The id stays available under Short, which is what --session takes.
 func (s *Session) Name() string {
 	s.rebuild()
 	for _, root := range s.Roots {
@@ -133,7 +105,7 @@ func oneLine(text string) string {
 
 // Short names the run in a header. A session that carries its own id is cut to
 // 8 characters of it. A trace-keyed one is cut to the last 8 of the trace: the
-// first 8 are the service name repeated, which read as "amp.cli amp.cli/".
+// first part is often the service name repeated.
 func (s *Session) Short() string {
 	title := s.Title()
 	if at := strings.LastIndex(title, "/"); at >= 0 {
@@ -226,8 +198,8 @@ func cleanDir(dir string) string {
 	return filepath.Clean(abs)
 }
 
-// key puts every span of one agent run together. opencode and codex emit no
-// session id, so the trace id stands in and mergeRuns folds the pieces back.
+// key puts every span of one agent run together. A trace id stands in when a
+// source does not supply a session id, and mergeRuns folds the pieces back.
 func key(span otlp.Span) string {
 	if span.Session != "" {
 		return span.Service + "/" + span.Session
@@ -235,19 +207,14 @@ func key(span otlp.Span) string {
 	return span.Service + "/trace/" + span.TraceID
 }
 
-// A harness with no run identity is recovered from the shape a run has: a
-// burst. Measured on codex 0.149.0, one `codex exec` produced 350 spans over 14
-// traces, and nothing tied them together. `thread_id` was on 2 spans of the
-// 350, `turn.id` on 3, and the resource carried no service.instance.id, so no
-// attribute could do it.
-//
-// 30s is longer than any gap inside the measured run and shorter than the time
-// between two runs a reader would call separate.
+// A source with no run identity is recovered from the shape a run has: a
+// burst. Thirty seconds is longer than a normal gap inside a run and shorter
+// than the time between two runs a reader would call separate.
 const runGap = 30 * time.Second
 
 // mergeRuns folds the trace-keyed sessions of one service into runs. A session
-// that carries its own id is never touched: claude and goose both name the run
-// themselves, and guessing over a stated fact would be worse than not guessing.
+// that carries its own id is never touched, because guessing over a stated fact
+// would be worse than not guessing.
 func mergeRuns(in []*Session) []*Session {
 	loose := map[string][]*Session{}
 	out := []*Session{}
@@ -331,7 +298,7 @@ func (s *Session) absorb(other *Session) {
 	s.dirty = true
 }
 
-// AddBatch joins Codex's `conversation.id` logs to spans that share their trace.
+// AddBatch joins records carrying a session id to spans that share their trace.
 func (s *Store) AddBatch(batch otlp.Batch) {
 	for _, one := range batch.Spans {
 		if one.TraceID != "" && one.Session != "" {
@@ -407,9 +374,9 @@ func (s *Store) Sessions() []*Session {
 	for _, one := range out {
 		one.rebuild()
 	}
-	// A harness without a session.id gets one fallback session per trace, and
-	// opencode emits dozens of 1-span traces per run. Rank those below the real
-	// runs so the picker opens on something worth attaching to.
+	// A source without a session id gets one fallback session per trace. Rank
+	// fragments below real runs so the picker opens on something worth attaching
+	// to.
 	sort.Slice(out, func(a, b int) bool {
 		if rankOf(out[a]) != rankOf(out[b]) {
 			return rankOf(out[a]) > rankOf(out[b])
@@ -419,18 +386,9 @@ func (s *Store) Sessions() []*Session {
 	return out
 }
 
-// notable ranks a run above a fragment. A harness with no run id leaves one
-// trace-keyed session per trace, and a trace can hold three copies of one
-// runtime span: `codex_cli_rs e1210620  3 items` opened to "auth 12µs" three
-// times, which is not a run and cost a listing row that a real one wanted.
-//
-// The test is variety rather than a count. A run does more than one thing; a
-// fragment repeats one span. It stays name-agnostic on purpose, because goose
-// and amp name their work nothing traces knows in advance.
-// rankOf sorts a run above telemetry about a run. A codex process exports its
-// own runtime spans as well as writing a rollout, and the two never join, so a
-// listing carried the real run beside four unnamed fragments of the same
-// process and ranked them all the same.
+// notable ranks a run above a fragment. The test is variety rather than a
+// count. A run does more than one thing; a fragment repeats one span.
+// rankOf sorts a run above telemetry about a run.
 func rankOf(one *Session) int {
 	switch {
 	case one.ID != "" || one.activity():
@@ -472,8 +430,7 @@ func notable(one *Session) bool {
 
 // Session selects out of Sessions rather than out of the raw map, because the
 // raw map holds one entry per trace and mergeRuns is what joins the traces of a
-// harness that emits no run id. Reading the map returned one fragment: --list
-// advertised an opencode run of 734 spans and --session opened 1 of them.
+// source that emits no run id.
 //
 // The suffix arm is what makes the name --list prints a usable selector: a
 // trace-keyed run is named by the last 8 of its trace, which prefix-matches
@@ -577,36 +534,46 @@ var joinKeys = []string{"request_id", "tool_use_id"}
 // already states wins, because the activity tree is what a reader is reading.
 var liftKeys = []string{"ttft_ms", "duration_ms", "speed", "attempt", "status_code", "llm_request.context"}
 
-func lift(span otlp.Span, from map[string]otlp.Span) otlp.Span {
+func lift(span otlp.Span, from map[string][]otlp.Span) (otlp.Span, []otlp.Span) {
 	if len(from) == 0 {
-		return span
+		return span, nil
 	}
+	seen := map[string]bool{}
+	facets := []otlp.Span{}
 	for _, key := range joinKeys {
 		id := span.Attrs[key]
 		if id == "" {
 			continue
 		}
-		other, ok := from[key+"="+id]
-		if !ok {
-			continue
-		}
-		for _, want := range liftKeys {
-			if span.Attrs[want] == "" && other.Attrs[want] != "" {
-				span.Attrs[want] = other.Attrs[want]
+		for _, other := range from[key+"="+id] {
+			if seen[other.SpanID] {
+				continue
+			}
+			seen[other.SpanID] = true
+			facets = append(facets, other)
+			for _, want := range liftKeys {
+				if span.Attrs[want] == "" && other.Attrs[want] != "" {
+					span.Attrs[want] = other.Attrs[want]
+				}
+			}
+			if span.Attrs["decision"] == "" && other.Attrs["decision"] != "" {
+				span.Attrs["decision"] = other.Attrs["decision"]
+			}
+			if other.Failed || other.Error != "" {
+				span.Failed = true
+			}
+			if span.Error == "" && other.Error != "" {
+				span.Error = other.Error
+			}
+			if other.End.After(span.End) {
+				span.End = other.End
+			}
+			if !other.Start.IsZero() && (span.Start.IsZero() || other.Start.Before(span.Start)) {
+				span.Start = other.Start
 			}
 		}
-		// The exporter stamps a span when the work ends and the transcript
-		// stamps it when the line was written, so the exporter's end is the
-		// later and truer one.
-		if other.End.After(span.End) {
-			span.End = other.End
-		}
-		if !other.Start.IsZero() && other.Start.Before(span.Start) {
-			span.Start = other.Start
-		}
-		break
 	}
-	return span
+	return span, facets
 }
 
 // recordKey matches key(), so a log record and a span of the same run land in
@@ -663,7 +630,7 @@ func (s *Session) rebuild() {
 	// is folded onto the activity span for the same work. The transcript has no
 	// time to first token and no wall clock for a model call; the exported span
 	// has both and nothing else worth a row.
-	lifted := map[string]otlp.Span{}
+	lifted := map[string][]otlp.Span{}
 	if preferActivity {
 		for _, span := range s.spans {
 			if span.Attrs["traces.view"] == "activity" {
@@ -671,35 +638,28 @@ func (s *Session) rebuild() {
 			}
 			for _, key := range joinKeys {
 				if id := span.Attrs[key]; id != "" {
-					lifted[key+"="+id] = span
+					joined := key + "=" + id
+					lifted[joined] = append(lifted[joined], span)
 				}
 			}
+		}
+		for joined := range lifted {
+			sort.Slice(lifted[joined], func(a, b int) bool {
+				left, right := lifted[joined][a], lifted[joined][b]
+				if left.Start.Equal(right.Start) {
+					return left.SpanID < right.SpanID
+				}
+				return left.Start.Before(right.Start)
+			})
 		}
 	}
 	for id, span := range s.spans {
 		if preferActivity && span.Attrs["traces.view"] != "activity" {
 			continue
 		}
-		if foldedInto[span.Name] {
-			continue
-		}
-		nodes[id] = describe(lift(span, lifted))
-	}
-
-	for _, span := range s.spans {
-		if !foldedInto[span.Name] {
-			continue
-		}
-		if parent, ok := nodes[span.ParentID]; ok {
-			parent.Facets = append(parent.Facets, span)
-			if span.Failed {
-				parent.Role = RoleError
-				parent.Span.Failed = true
-			}
-			if decision := span.Attrs["decision"]; decision != "" && decision != "accept" {
-				parent.Note = decision
-			}
-		}
+		enriched, facets := lift(span, lifted)
+		nodes[id] = describe(enriched)
+		nodes[id].Facets = facets
 	}
 
 	pending := map[string]*Node{}
@@ -774,12 +734,6 @@ func sortKids(node *Node) {
 		}
 		return node.Children[a].Span.Start.Before(node.Children[b].Span.Start)
 	})
-	sort.Slice(node.Facets, func(a, b int) bool {
-		if node.Facets[a].Start.Equal(node.Facets[b].Start) {
-			return node.Facets[a].SpanID < node.Facets[b].SpanID
-		}
-		return node.Facets[a].Start.Before(node.Facets[b].Start)
-	})
 }
 
 // describe assigns the role that picks the row color and the short label that
@@ -787,34 +741,38 @@ func sortKids(node *Node) {
 // the operation carries the meaning and the subject rarely does.
 func describe(span otlp.Span) *Node {
 	node := &Node{Span: span, Role: RoleSystem, Label: span.Name, Patch: span.Attrs["traces.patch"]}
+	operation := span.Name
+	if at := strings.LastIndex(operation, "."); at >= 0 {
+		operation = operation[at+1:]
+	}
 
-	switch span.Name {
-	case "claude_code.interaction", "agent.turn":
+	switch {
+	case span.Name == "agent.turn" || operation == "interaction":
 		node.Role, node.Label = RoleTurn, "turn"
-	case "claude_code.llm_request", "agent.model":
+	case span.Name == "agent.model" || operation == "llm_request":
 		node.Role, node.Label = RoleModel, model(span.Attrs)
 		node.Note = produced(span.Attrs)
 	// A note is what the harness told the reader outside the conversation: a
 	// hook's verdict, a warning, an API error. The default branch split the span
 	// name and every one of them rendered as "note — agent".
-	case "agent.note":
+	case span.Name == "agent.note":
 		node.Role, node.Label = RoleSystem, first(span.Attrs["note.kind"], "note")
 		node.Note = first(span.Attrs["note.text"], span.Attrs["note.level"])
 		if span.Attrs["note.level"] == "error" {
 			node.Role = RoleError
 		}
-	case "claude_code.tool", "agent.tool", "agent.edit":
+	case span.Name == "agent.tool" || span.Name == "agent.edit" || operation == "tool":
 		raw := span.Attrs["tool_name"]
 		action := span.Attrs["traces.action"]
-		if action == "" {
-			action = actionAliases[strings.ToLower(raw)]
-		}
 		node.Label = actionLabel(action, raw)
 		node.Role = RoleTool
+		if decision := span.Attrs["decision"]; decision != "" && decision != "accept" {
+			node.Note = decision
+		}
 		if action == "delegate" {
 			node.Role = RoleDelegate
 		}
-	case "agent.compact":
+	case span.Name == "agent.compact":
 		node.Role, node.Label = RoleSystem, "compact"
 	default:
 		parts := strings.Split(span.Name, ".")
@@ -851,7 +809,7 @@ func model(attrs map[string]string) string {
 	if name == "" {
 		return "model"
 	}
-	// claude-opus-5-20260101 reads as claude-opus-5 in a 12 column label.
+	// A dated model revision reads better without its YYYYMMDD suffix.
 	parts := strings.Split(name, "-")
 	if len(parts) > 1 && len(parts[len(parts)-1]) == 8 {
 		parts = parts[:len(parts)-1]
@@ -916,8 +874,7 @@ func count(text string) int {
 	if n, err := strconv.Atoi(text); err == nil {
 		return n
 	}
-	// A count arrives as a float when the source is Observe, because JSON has
-	// one number type.
+	// A count from a JSON-backed source may arrive as a float.
 	if f, err := strconv.ParseFloat(text, 64); err == nil {
 		return int(f)
 	}

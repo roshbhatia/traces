@@ -1,16 +1,16 @@
 {
-  "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$defs": {
     "Action": {
+      "additionalProperties": false,
       "properties": {
-        "description": {
-          "type": "string"
-        },
         "argv": {
           "items": {
             "type": "string"
           },
           "type": "array"
+        },
+        "description": {
+          "type": "string"
         },
         "env": {
           "additionalProperties": {
@@ -19,30 +19,30 @@
           "type": "object"
         }
       },
-      "additionalProperties": false,
-      "type": "object",
       "required": [
         "description"
-      ]
+      ],
+      "type": "object"
     },
     "Defaults": {
+      "additionalProperties": false,
       "properties": {
-        "timeout": {
-          "$ref": "#/$defs/Duration"
-        },
         "priority": {
           "type": "integer"
+        },
+        "timeout": {
+          "$ref": "#/$defs/Duration"
         }
       },
-      "additionalProperties": false,
       "type": "object"
     },
     "Duration": {
-      "type": "string",
+      "description": "Go duration such as 500ms, 10s, or 2m",
       "pattern": "^[0-9]+(ns|us|µs|ms|s|m|h)$",
-      "description": "Go duration such as 500ms, 10s, or 2m"
+      "type": "string"
     },
     "Requirements": {
+      "additionalProperties": false,
       "properties": {
         "commands": {
           "items": {
@@ -63,46 +63,53 @@
           "type": "array"
         }
       },
-      "additionalProperties": false,
       "type": "object"
     }
   },
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
   "properties": {
-    "version": {
-      "type": "string",
-      "enum": [
-        "provider/v1"
-      ]
-    },
-    "name": {
-      "type": "string",
-      "pattern": "^[a-z][a-z0-9._-]*$"
-    },
-    "description": {
-      "type": "string"
+    "actions": {
+      "additionalProperties": {
+        "$ref": "#/$defs/Action"
+      },
+      "propertyNames": {
+        "enum": [
+          "activity.read",
+          "diff.render",
+          "session.current",
+          "session.discover"
+        ]
+      },
+      "type": "object"
     },
     "command": {
       "items": {
         "type": "string"
       },
-      "type": "array",
-      "minItems": 1
+      "minItems": 1,
+      "type": "array"
     },
-    "actions": {
-      "additionalProperties": {
-        "$ref": "#/$defs/Action"
-      },
-      "type": "object"
+    "defaults": {
+      "$ref": "#/$defs/Defaults"
+    },
+    "description": {
+      "type": "string"
+    },
+    "name": {
+      "pattern": "^[a-z][a-z0-9._-]*$",
+      "type": "string"
     },
     "requires": {
       "$ref": "#/$defs/Requirements"
     },
-    "defaults": {
-      "$ref": "#/$defs/Defaults"
+    "version": {
+      "enum": [
+        "provider/v1"
+      ],
+      "type": "string"
     }
   },
-  "additionalProperties": false,
-  "type": "object",
   "required": [
     "version",
     "name",
@@ -110,5 +117,6 @@
     "command",
     "actions"
   ],
-  "title": "External provider manifest"
+  "title": "External provider manifest",
+  "type": "object"
 }

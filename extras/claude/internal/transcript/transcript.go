@@ -24,13 +24,13 @@ package transcript
 import (
 	"bufio"
 	"encoding/json"
-	"fmt"
 	"maps"
 	"os"
 	"path/filepath"
 	"sort"
 	"strconv"
 	"strings"
+	"text/template"
 	"time"
 
 	"github.com/roshbhatia/traces/internal/otlp"
@@ -517,6 +517,9 @@ func (e entry) calls(parent *node, extra map[string]string) []*node {
 			"tool_name":   b.Name,
 			"tool_use_id": b.ID,
 		})
+		if action := actionOf(b.Name); action != "" {
+			attrs["traces.action"] = action
+		}
 		delete(attrs, "stop_reason")
 		delete(attrs, "user_prompt")
 		delete(attrs, "user_prompt_length")
@@ -546,6 +549,27 @@ var quietNotes = map[string]bool{
 // A write is drawn as a diff rather than as a blob of arguments, so it is named
 // apart from the tools that only read.
 var editors = map[string]bool{"Edit": true, "Write": true, "NotebookEdit": true}
+
+// actionOf translates this provider's tool vocabulary into the generic actions
+// that Traces renders. Unknown tools keep their own names.
+func actionOf(tool string) string {
+	switch strings.ToLower(tool) {
+	case "agent", "task":
+		return "delegate"
+	case "apply_patch", "edit", "notebookedit", "write":
+		return "edit"
+	case "bash", "shell":
+		return "shell"
+	case "glob", "grep", "web.search", "websearch":
+		return "search"
+	case "read":
+		return "read"
+	case "update_plan":
+		return "plan"
+	default:
+		return ""
+	}
+}
 
 // argsOf lifts the arguments a reader actually reads onto the span. full_command
 // and file_path are the two keys the rest of traces already looks for, so a
@@ -630,16 +654,32 @@ func unified(path, before, after string) (string, int, int) {
 	}
 	del := lines(before)
 	add := lines(after)
-	b := &strings.Builder{}
-	fmt.Fprintf(b, "--- %s\n+++ %s\n", oldPath, newPath)
-	fmt.Fprintf(b, "@@ -1,%d +1,%d @@\n", len(del), len(add))
-	for _, one := range del {
-		fmt.Fprintf(b, "-%s\n", one)
+	patch := renderPatch(unifiedTemplate, unifiedView{
+		OldPath: oldPath, NewPath: newPath, Deleted: del, Added: add,
+	})
+	return patch, len(add), len(del)
+}
+
+type unifiedView struct {
+	OldPath string
+	NewPath string
+	Deleted []string
+	Added   []string
+}
+
+var unifiedTemplate = template.Must(template.New("unified patch").Option("missingkey=error").Parse(`--- {{ .OldPath }}
++++ {{ .NewPath }}
+@@ -1,{{ len .Deleted }} +1,{{ len .Added }} @@
+{{ range .Deleted }}-{{ . }}
+{{ end }}{{ range .Added }}+{{ . }}
+{{ end }}`))
+
+func renderPatch(parsed *template.Template, data any) string {
+	var output strings.Builder
+	if err := parsed.Execute(&output, data); err != nil {
+		panic(err)
 	}
-	for _, one := range add {
-		fmt.Fprintf(b, "+%s\n", one)
-	}
-	return b.String(), len(add), len(del)
+	return output.String()
 }
 
 // relative trims the working directory off a path inside it. A path elsewhere is

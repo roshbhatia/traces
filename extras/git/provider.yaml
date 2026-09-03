@@ -2,13 +2,15 @@
 version: provider/v1
 name: git
 description: Render a two-file diff with Git
-command: [git]
+command: [traces-provider-git]
+requires:
+  commands: [bash, git]
 defaults:
   timeout: 5s
 actions:
   diff.render:
     description: Render a Git-compatible two-file diff
-    argv: [diff, --no-index, --color=always, --, "{{ .Local }}", "{{ .Remote }}"]
+    argv: ["{{ .Local }}", "{{ .Remote }}", "{{ .Merged }}", "{{ .Color }}"]
     env:
       LOCAL: "{{ .Local }}"
       REMOTE: "{{ .Remote }}"

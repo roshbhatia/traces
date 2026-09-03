@@ -45,6 +45,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+	"unicode"
+	"unicode/utf8"
 
 	sharedprovider "github.com/roshbhatia/go-utils/provider"
 	"github.com/roshbhatia/traces/internal/otlp"
@@ -61,6 +63,13 @@ const (
 	ActionDiffRender      = "diff.render"
 )
 
+var supportedActionNames = []string{
+	ActionActivityRead,
+	ActionDiffRender,
+	ActionSessionCurrent,
+	ActionSessionDiscover,
+}
+
 // Registry is the discovered provider set indexed by manifest name.
 type Registry map[string]sharedprovider.LoadedManifest
 
@@ -72,8 +81,10 @@ type Provider struct {
 	// Session narrows the read when the provider can do it. traces resolves a
 	// prefix itself, so a provider may ignore this.
 	Session string
-	// Directory lets providers find workspace-scoped sources such as Git commits.
+	// Directory lets providers find workspace-scoped sources such as commits.
 	Directory string
+	// Color is the caller's output policy for rendering actions.
+	Color string
 	// harnesses are the services this source answers for. It is empty on a
 	// source the caller named directly, which is a deliberate escape hatch and
 	// is never scoped.
@@ -115,8 +126,8 @@ func validationCheck(name, message string, ok bool) ValidationCheck {
 	return ValidationCheck{Name: name, Message: message, Status: status}
 }
 
-// Validate resolves one provider, runs a zero-length activity query, and
-// verifies every returned protocol line without opening the interactive UI.
+// Validate resolves one provider and probes every declared standard action
+// without opening the interactive UI or reading the caller's session state.
 func Validate(ctx context.Context, name string, loaded sharedprovider.LoadedManifest, directory string) Validation {
 	manifest := loaded.Manifest
 	provides := make([]string, 0, len(manifest.Actions))
@@ -135,91 +146,234 @@ func Validate(ctx context.Context, name string, loaded sharedprovider.LoadedMani
 		result.Status = "failed"
 		return result
 	}
-	fixture := actionData{
-		Since: "0s", Session: "traces-provider-validation", Directory: directory,
-		Local: "old.txt", Remote: "new.txt", Merged: "example.txt", Width: 80, Color: "always",
+	if err := validateSupportedActions(manifest); err != nil {
+		result.Checks = append(result.Checks, validationCheck("manifest:actions", err.Error(), false))
+		result.Status = "failed"
+		return result
 	}
-	for _, action := range provides {
-		if _, err := manifest.Render(action, fixture); err != nil {
-			result.Checks = append(result.Checks, validationCheck("template:"+action, err.Error(), false))
+	result.Status = "ok"
+	temporary, err := os.MkdirTemp("", "traces-provider-validation-")
+	if err != nil {
+		result.Checks = append(result.Checks, validationCheck("fixture", err.Error(), false))
+		result.Status = "failed"
+		return result
+	}
+	defer func() { _ = os.RemoveAll(temporary) }()
+	workspace := filepath.Join(temporary, "workspace")
+	home := filepath.Join(temporary, "home")
+	for _, path := range []string{
+		workspace,
+		home,
+		filepath.Join(temporary, "cache"),
+		filepath.Join(temporary, "config"),
+		filepath.Join(temporary, "data"),
+		filepath.Join(temporary, "tmp"),
+	} {
+		if err := os.MkdirAll(path, 0o700); err != nil {
+			result.Checks = append(result.Checks, validationCheck("fixture", err.Error(), false))
 			result.Status = "failed"
 			return result
 		}
 	}
-	result.Checks = append(result.Checks, validationCheck(
-		"templates", "rendered every action with deterministic inputs", true,
-	))
-	_, activity := manifest.Actions[ActionActivityRead]
-	if !activity {
-		if _, diff := manifest.Actions[ActionDiffRender]; diff {
-			if err := validateDiff(ctx, manifest, directory); err != nil {
-				result.Checks = append(result.Checks, validationCheck("diff.render", err.Error(), false))
-				result.Status = "failed"
-				return result
-			}
-			result.Checks = append(result.Checks, validationCheck(
-				"diff.render", "rendered a deterministic two-file diff", true,
-			))
+	environment := validationEnvironment(temporary, manifest.Requires.Environment)
+	fixture := actionData{
+		Since: "0s", Session: "traces-provider-validation", Directory: workspace,
+		Local: filepath.Join(temporary, "old.txt"), Remote: filepath.Join(temporary, "new.txt"),
+		Merged: filepath.Join(temporary, "example.txt"), Width: 80, Color: "always",
+	}
+	if err := os.WriteFile(fixture.Local, []byte("old\n"), 0o600); err != nil {
+		result.Checks = append(result.Checks, validationCheck("fixture", err.Error(), false))
+		result.Status = "failed"
+		return result
+	}
+	if err := os.WriteFile(fixture.Remote, []byte("new\n"), 0o600); err != nil {
+		result.Checks = append(result.Checks, validationCheck("fixture", err.Error(), false))
+		result.Status = "failed"
+		return result
+	}
+	plans := make(map[string]sharedprovider.Plan, len(provides))
+	for _, action := range provides {
+		plan, err := manifest.Render(action, fixture)
+		if err != nil {
+			result.Checks = append(result.Checks, validationCheck("template:"+action, err.Error(), false))
+			result.Status = "failed"
+			continue
 		}
-		result.Status = "ok"
-		return result
+		plans[action] = plan
 	}
-	plan, err := manifest.Render(ActionActivityRead, actionData{
-		Since: "0s", Session: "traces-provider-validation", Directory: directory,
-	})
-	if err != nil {
-		result.Checks = append(result.Checks, validationCheck("template", err.Error(), false))
-		result.Status = "failed"
-		return result
-	}
-	output, stderr, err := runPlan(ctx, plan, directory)
-	if err != nil {
-		message := strings.TrimSpace(stderr)
-		if message == "" {
-			message = err.Error()
+	for _, action := range provides {
+		plan, ok := plans[action]
+		if !ok {
+			continue
 		}
-		result.Checks = append(result.Checks, validationCheck("probe", message, false))
-		result.Status = "failed"
-		return result
+		message, err := validateAction(ctx, action, plan, workspace, environment)
+		if err != nil {
+			result.Checks = append(result.Checks, validationCheck("probe:"+action, err.Error(), false))
+			result.Status = "failed"
+			continue
+		}
+		result.Checks = append(result.Checks, validationCheck("probe:"+action, message, true))
 	}
-	if err := validateOutput(output); err != nil {
-		result.Checks = append(result.Checks, validationCheck("protocol", err.Error(), false))
-		result.Status = "failed"
-		return result
-	}
-	message := "accepted empty activity for a zero-length window"
-	if len(bytes.TrimSpace(output)) > 0 {
-		message = "returned valid newline-delimited activity"
-	}
-	result.Checks = append(result.Checks, validationCheck("protocol", message, true))
-	result.Status = "ok"
 	return result
 }
 
-func validateDiff(ctx context.Context, manifest sharedprovider.Manifest, directory string) error {
-	temporary, err := os.MkdirTemp("", "traces-provider-validation-")
-	if err != nil {
-		return err
+func validateAction(
+	ctx context.Context,
+	action string,
+	plan sharedprovider.Plan,
+	directory string,
+	environment []string,
+) (string, error) {
+	if plan.Timeout <= 0 {
+		plan.Timeout = 10 * time.Second
 	}
-	defer func() { _ = os.RemoveAll(temporary) }()
-	local := filepath.Join(temporary, "old.txt")
-	remote := filepath.Join(temporary, "new.txt")
-	if err := os.WriteFile(local, []byte("old\n"), 0o600); err != nil {
-		return err
+	switch action {
+	case ActionActivityRead:
+		output, stderr, err := runPlanWithEnvironment(ctx, plan, directory, environment)
+		if err != nil {
+			return "", providerCommandError(stderr, err)
+		}
+		if err := validateOutput(output); err != nil {
+			return "", err
+		}
+		if len(bytes.TrimSpace(output)) == 0 {
+			return "accepted empty activity for a zero-length window", nil
+		}
+		return "returned valid newline-delimited activity", nil
+	case ActionSessionCurrent, ActionSessionDiscover:
+		output, stderr, err := runPlanWithEnvironment(ctx, plan, directory, environment)
+		if err != nil {
+			return "", providerCommandError(stderr, err)
+		}
+		limit := 0
+		if action == ActionSessionCurrent {
+			limit = 1
+		}
+		count, err := validateSessionOutput(output, limit)
+		if err != nil {
+			return "", err
+		}
+		return fmt.Sprintf("returned %d valid session identifiers", count), nil
+	case ActionDiffRender:
+		return validateDiff(ctx, plan, directory, environment)
+	default:
+		return "", fmt.Errorf("unsupported action %q", action)
 	}
-	if err := os.WriteFile(remote, []byte("new\n"), 0o600); err != nil {
-		return err
+}
+
+func validateSupportedActions(manifest sharedprovider.Manifest) error {
+	allowed := make(map[string]bool, len(supportedActionNames))
+	for _, name := range supportedActionNames {
+		allowed[name] = true
 	}
-	selected := Provider{Manifest: manifest, Name: manifest.Name}
-	output, err := selected.RenderDiff(ctx, local, remote, "example.txt", 80)
-	if err != nil {
-		return err
+	for name := range manifest.Actions {
+		if !allowed[name] {
+			return fmt.Errorf("provider %q advertises unsupported action %q", manifest.Name, name)
+		}
 	}
-	if strings.TrimSpace(output) == "" {
-		return fmt.Errorf("provider returned empty diff output")
-	}
-	_ = directory
 	return nil
+}
+
+// ProviderSchema narrows the shared provider format to Traces capabilities.
+func ProviderSchema() ([]byte, error) {
+	data, err := sharedprovider.Schema()
+	if err != nil {
+		return nil, err
+	}
+	var schema map[string]any
+	if err := json.Unmarshal(data, &schema); err != nil {
+		return nil, fmt.Errorf("decode provider schema: %w", err)
+	}
+	properties, ok := schema["properties"].(map[string]any)
+	if !ok {
+		return nil, fmt.Errorf("provider schema has no properties")
+	}
+	actions, ok := properties["actions"].(map[string]any)
+	if !ok {
+		return nil, fmt.Errorf("provider schema has no actions")
+	}
+	actions["propertyNames"] = map[string]any{"enum": supportedActionNames}
+	encoded, err := json.MarshalIndent(schema, "", "  ")
+	if err != nil {
+		return nil, fmt.Errorf("encode provider schema: %w", err)
+	}
+	return append(encoded, '\n'), nil
+}
+
+func providerCommandError(stderr string, err error) error {
+	if message := strings.TrimSpace(stderr); message != "" {
+		return errors.New(message)
+	}
+	return err
+}
+
+func validateSessionOutput(output []byte, limit int) (int, error) {
+	if !utf8.Valid(output) {
+		return 0, fmt.Errorf("session output is not valid UTF-8")
+	}
+	count := 0
+	for _, line := range strings.Split(string(output), "\n") {
+		id := strings.TrimSpace(line)
+		if id == "" {
+			continue
+		}
+		if strings.IndexFunc(id, unicode.IsControl) >= 0 {
+			return 0, fmt.Errorf("session identifier contains a control character")
+		}
+		count++
+		if limit > 0 && count > limit {
+			return 0, fmt.Errorf("session.current returned more than one identifier")
+		}
+	}
+	return count, nil
+}
+
+func validateDiff(
+	ctx context.Context,
+	plan sharedprovider.Plan,
+	directory string,
+	environment []string,
+) (string, error) {
+	output, stderr, err := runPlanWithEnvironment(ctx, plan, directory, environment)
+	if err != nil {
+		var exit *exec.ExitError
+		if !errors.As(err, &exit) || exit.ExitCode() != 1 {
+			return "", providerCommandError(stderr, err)
+		}
+	}
+	if strings.TrimSpace(string(output)) == "" {
+		return "", fmt.Errorf("provider returned empty diff output")
+	}
+	return "rendered a deterministic two-file diff", nil
+}
+
+func validationEnvironment(root string, required []string) []string {
+	environment := map[string]string{
+		"HOME":            filepath.Join(root, "home"),
+		"TMPDIR":          filepath.Join(root, "tmp"),
+		"XDG_CACHE_HOME":  filepath.Join(root, "cache"),
+		"XDG_CONFIG_HOME": filepath.Join(root, "config"),
+		"XDG_DATA_HOME":   filepath.Join(root, "data"),
+		"XDG_DATA_DIRS":   filepath.Join(root, "data-dirs"),
+	}
+	if path := os.Getenv("PATH"); path != "" {
+		environment["PATH"] = path
+	}
+	for _, name := range required {
+		if value, ok := os.LookupEnv(name); ok {
+			environment[name] = value
+		}
+	}
+	keys := make([]string, 0, len(environment))
+	for key := range environment {
+		keys = append(keys, key)
+	}
+	sort.Strings(keys)
+	result := make([]string, 0, len(keys))
+	for _, key := range keys {
+		result = append(result, key+"="+environment[key])
+	}
+	return result
 }
 
 func validateOutput(output []byte) error {
@@ -233,21 +387,239 @@ func validateOutput(output []byte) error {
 			continue
 		}
 		var value map[string]json.RawMessage
-		if err := json.Unmarshal(text, &value); err != nil {
+		if err := json.Unmarshal(text, &value); err != nil || value == nil {
 			return fmt.Errorf("line %d is not a JSON object", lineNumber)
 		}
-		if _, otlp := value["resourceSpans"]; otlp {
+		if _, spans := value["resourceSpans"]; spans {
+			if err := validateOTLPExport(value, lineNumber); err != nil {
+				return err
+			}
+			continue
+		}
+		if _, logs := value["resourceLogs"]; logs {
+			if err := validateOTLPExport(value, lineNumber); err != nil {
+				return err
+			}
 			continue
 		}
 		if _, event := value["event"]; event {
+			if err := validateFlatEvent(text, lineNumber, value); err != nil {
+				return err
+			}
 			continue
 		}
-		if _, span := value["spanId"]; !span {
-			return fmt.Errorf("line %d is neither a span, event, nor OTLP export", lineNumber)
+		if _, span := value["spanId"]; span {
+			if err := validateFlatSpan(text, lineNumber, value); err != nil {
+				return err
+			}
+			continue
 		}
+		return fmt.Errorf("line %d is neither a span, event, nor OTLP export", lineNumber)
 	}
 	if err := rows.Err(); err != nil {
 		return fmt.Errorf("read output: %w", err)
+	}
+	return nil
+}
+
+func validateFlatSpan(text []byte, lineNumber int, value map[string]json.RawMessage) error {
+	var span line
+	if err := json.Unmarshal(text, &span); err != nil {
+		return fmt.Errorf("line %d has an invalid span field type: %w", lineNumber, err)
+	}
+	for _, field := range []struct {
+		name  string
+		value string
+	}{
+		{name: "traceId", value: span.TraceID},
+		{name: "spanId", value: span.SpanID},
+		{name: "name", value: span.Name},
+		{name: "startUnixNano", value: span.Start},
+		{name: "endUnixNano", value: span.End},
+	} {
+		if field.value == "" {
+			return fmt.Errorf("line %d span requires non-empty %s", lineNumber, field.name)
+		}
+	}
+	if err := validateStamp(span.Start); err != nil {
+		return fmt.Errorf("line %d span startUnixNano: %w", lineNumber, err)
+	}
+	if err := validateStamp(span.End); err != nil {
+		return fmt.Errorf("line %d span endUnixNano: %w", lineNumber, err)
+	}
+	return validateAttrs(value, lineNumber)
+}
+
+func validateFlatEvent(text []byte, lineNumber int, value map[string]json.RawMessage) error {
+	var event line
+	if err := json.Unmarshal(text, &event); err != nil {
+		return fmt.Errorf("line %d has an invalid event field type: %w", lineNumber, err)
+	}
+	if event.Event == "" {
+		return fmt.Errorf("line %d event requires non-empty event", lineNumber)
+	}
+	if event.Start == "" {
+		return fmt.Errorf("line %d event requires non-empty startUnixNano", lineNumber)
+	}
+	if err := validateStamp(event.Start); err != nil {
+		return fmt.Errorf("line %d event startUnixNano: %w", lineNumber, err)
+	}
+	return validateAttrs(value, lineNumber)
+}
+
+func validateAttrs(value map[string]json.RawMessage, lineNumber int) error {
+	raw, ok := value["attrs"]
+	if !ok {
+		return nil
+	}
+	if bytes.Equal(bytes.TrimSpace(raw), []byte("null")) {
+		return fmt.Errorf("line %d attrs must be an object of strings", lineNumber)
+	}
+	var attrs map[string]string
+	if err := json.Unmarshal(raw, &attrs); err != nil {
+		return fmt.Errorf("line %d attrs must be an object of strings: %w", lineNumber, err)
+	}
+	return nil
+}
+
+func validateStamp(value string) error {
+	if _, err := strconv.ParseInt(value, 10, 64); err != nil {
+		return fmt.Errorf("must be a decimal nanosecond string")
+	}
+	return nil
+}
+
+type validationValue struct {
+	StringValue *string  `json:"stringValue"`
+	IntValue    *string  `json:"intValue"`
+	BoolValue   *bool    `json:"boolValue"`
+	DoubleValue *float64 `json:"doubleValue"`
+	ArrayValue  *struct {
+		Values []validationValue `json:"values"`
+	} `json:"arrayValue"`
+}
+
+type validationKeyValue struct {
+	Key   string          `json:"key"`
+	Value validationValue `json:"value"`
+}
+
+type validationResource struct {
+	Attributes []validationKeyValue `json:"attributes"`
+}
+
+type validationLogRecord struct {
+	TraceID    string               `json:"traceId"`
+	SpanID     string               `json:"spanId"`
+	Time       string               `json:"timeUnixNano"`
+	Observed   string               `json:"observedTimeUnixNano"`
+	EventName  string               `json:"eventName"`
+	Body       validationValue      `json:"body"`
+	Attributes []validationKeyValue `json:"attributes"`
+}
+
+type validationSpan struct {
+	TraceID      string               `json:"traceId"`
+	SpanID       string               `json:"spanId"`
+	ParentSpanID string               `json:"parentSpanId"`
+	Name         string               `json:"name"`
+	Start        string               `json:"startTimeUnixNano"`
+	End          string               `json:"endTimeUnixNano"`
+	Attributes   []validationKeyValue `json:"attributes"`
+	Status       struct {
+		Code    int    `json:"code"`
+		Message string `json:"message"`
+	} `json:"status"`
+}
+
+type validationExport struct {
+	ResourceLogs []struct {
+		Resource  validationResource `json:"resource"`
+		ScopeLogs []struct {
+			LogRecords []validationLogRecord `json:"logRecords"`
+		} `json:"scopeLogs"`
+	} `json:"resourceLogs"`
+	ResourceSpans []struct {
+		Resource   validationResource `json:"resource"`
+		ScopeSpans []struct {
+			Spans []validationSpan `json:"spans"`
+		} `json:"scopeSpans"`
+	} `json:"resourceSpans"`
+}
+
+func validateOTLPExport(value map[string]json.RawMessage, lineNumber int) error {
+	for _, field := range []string{"resourceSpans", "resourceLogs"} {
+		raw, ok := value[field]
+		if !ok {
+			continue
+		}
+		var rows []json.RawMessage
+		if bytes.Equal(bytes.TrimSpace(raw), []byte("null")) || json.Unmarshal(raw, &rows) != nil {
+			return fmt.Errorf("line %d %s must be an array", lineNumber, field)
+		}
+	}
+	blob, err := json.Marshal(value)
+	if err != nil {
+		return fmt.Errorf("line %d cannot read OTLP export: %w", lineNumber, err)
+	}
+	var exported validationExport
+	if err := json.Unmarshal(blob, &exported); err != nil {
+		return fmt.Errorf("line %d has an invalid OTLP field type: %w", lineNumber, err)
+	}
+	for resourceIndex, resource := range exported.ResourceLogs {
+		for scopeIndex, scope := range resource.ScopeLogs {
+			for recordIndex, record := range scope.LogRecords {
+				position := fmt.Sprintf(
+					"line %d OTLP log record %d/%d/%d", lineNumber, resourceIndex, scopeIndex, recordIndex,
+				)
+				if record.Time == "" && record.Observed == "" {
+					return fmt.Errorf("%s requires timeUnixNano or observedTimeUnixNano", position)
+				}
+				for _, stamp := range []struct {
+					name  string
+					value string
+				}{
+					{name: "timeUnixNano", value: record.Time},
+					{name: "observedTimeUnixNano", value: record.Observed},
+				} {
+					if stamp.value == "" {
+						continue
+					}
+					if err := validateStamp(stamp.value); err != nil {
+						return fmt.Errorf("%s %s: %w", position, stamp.name, err)
+					}
+				}
+			}
+		}
+	}
+	for resourceIndex, resource := range exported.ResourceSpans {
+		for scopeIndex, scope := range resource.ScopeSpans {
+			for spanIndex, span := range scope.Spans {
+				position := fmt.Sprintf(
+					"line %d OTLP span %d/%d/%d", lineNumber, resourceIndex, scopeIndex, spanIndex,
+				)
+				for _, field := range []struct {
+					name  string
+					value string
+				}{
+					{name: "traceId", value: span.TraceID},
+					{name: "spanId", value: span.SpanID},
+					{name: "name", value: span.Name},
+					{name: "startTimeUnixNano", value: span.Start},
+					{name: "endTimeUnixNano", value: span.End},
+				} {
+					if field.value == "" {
+						return fmt.Errorf("%s requires non-empty %s", position, field.name)
+					}
+				}
+				if err := validateStamp(span.Start); err != nil {
+					return fmt.Errorf("%s startTimeUnixNano: %w", position, err)
+				}
+				if err := validateStamp(span.End); err != nil {
+					return fmt.Errorf("%s endTimeUnixNano: %w", position, err)
+				}
+			}
+		}
 	}
 	return nil
 }
@@ -279,6 +651,11 @@ func discoverDirectory(directory string) ([]sharedprovider.LoadedManifest, error
 	if err != nil {
 		return nil, err
 	}
+	for _, item := range loaded {
+		if err := validateSupportedActions(item.Manifest); err != nil {
+			return nil, fmt.Errorf("%s: %w", item.Path, err)
+		}
+	}
 	entries, err := os.ReadDir(directory)
 	if errors.Is(err, os.ErrNotExist) {
 		return loaded, nil
@@ -299,6 +676,9 @@ func discoverDirectory(directory string) ([]sharedprovider.LoadedManifest, error
 			return nil, err
 		}
 		for _, item := range children {
+			if err := validateSupportedActions(item.Manifest); err != nil {
+				return nil, fmt.Errorf("%s: %w", item.Path, err)
+			}
 			if previous, exists := seen[item.Manifest.Name]; exists {
 				return nil, fmt.Errorf("duplicate provider %q in %s and %s", item.Manifest.Name, previous, item.Path)
 			}
@@ -517,14 +897,18 @@ func (p Provider) Fetch(ctx context.Context, window time.Duration) (otlp.Batch, 
 	return Decode(out), nil
 }
 
-// RenderDiff runs the provider's Git-difftool-compatible rendering action.
+// RenderDiff runs the provider's two-file rendering action.
 func (p Provider) RenderDiff(
 	ctx context.Context,
 	local, remote, merged string,
 	width int,
 ) (string, error) {
+	color := strings.TrimSpace(p.Color)
+	if color == "" {
+		color = "auto"
+	}
 	plan, err := p.Manifest.Render(ActionDiffRender, actionData{
-		Local: local, Remote: remote, Merged: merged, Width: width, Color: "always",
+		Local: local, Remote: remote, Merged: merged, Width: width, Color: color,
 	})
 	if err != nil {
 		return "", err
@@ -540,6 +924,15 @@ func (p Provider) RenderDiff(
 }
 
 func runPlan(ctx context.Context, plan sharedprovider.Plan, directory string) ([]byte, string, error) {
+	return runPlanWithEnvironment(ctx, plan, directory, os.Environ())
+}
+
+func runPlanWithEnvironment(
+	ctx context.Context,
+	plan sharedprovider.Plan,
+	directory string,
+	environment []string,
+) ([]byte, string, error) {
 	if len(plan.Argv) == 0 {
 		return nil, "", fmt.Errorf("provider rendered an empty command")
 	}
@@ -552,14 +945,34 @@ func runPlan(ctx context.Context, plan sharedprovider.Plan, directory string) ([
 	if directory != "" {
 		command.Dir = directory
 	}
-	command.Env = os.Environ()
-	for key, value := range plan.Env {
-		command.Env = append(command.Env, key+"="+value)
-	}
+	command.Env = mergeEnvironment(environment, plan.Env)
 	stderr := &strings.Builder{}
 	command.Stderr = stderr
 	output, err := command.Output()
 	return output, stderr.String(), err
+}
+
+func mergeEnvironment(base []string, overrides map[string]string) []string {
+	values := make(map[string]string, len(base)+len(overrides))
+	for _, entry := range base {
+		key, value, ok := strings.Cut(entry, "=")
+		if ok {
+			values[key] = value
+		}
+	}
+	for key, value := range overrides {
+		values[key] = value
+	}
+	keys := make([]string, 0, len(values))
+	for key := range values {
+		keys = append(keys, key)
+	}
+	sort.Strings(keys)
+	result := make([]string, 0, len(keys))
+	for _, key := range keys {
+		result = append(result, key+"="+values[key])
+	}
+	return result
 }
 
 // line is the shape a provider prints. It is deliberately flatter than the OTLP
@@ -722,12 +1135,7 @@ func sessionOf(given string, attrs map[string]string) string {
 	if given != "" {
 		return given
 	}
-	for _, key := range []string{"session.id", "conversation.id", "thread_id", "ai.telemetry.metadata.sessionId"} {
-		if attrs[key] != "" {
-			return attrs[key]
-		}
-	}
-	return ""
+	return otlp.SessionID(attrs)
 }
 
 // Follow polls the provider and sends only the spans it has not sent before.

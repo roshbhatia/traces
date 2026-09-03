@@ -35,6 +35,10 @@ archives:
     name_template: >-
       {{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}
     files:
+      - src: extras/git/main.sh
+        dst: traces-provider-git
+        info:
+          mode: 0755
       - src: extras/claude/provider.yaml
         dst: share/traces/providers/claude/provider.yaml
       - src: extras/codex/provider.yaml

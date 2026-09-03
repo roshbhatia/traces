@@ -57,6 +57,11 @@ Traces never inserts a shell. An activity provider writes newline-delimited
 spans and events to standard output. Several providers may serve one harness.
 Traces merges their output and removes duplicate spans.
 
+Activity providers normalize native events to `agent.turn`, `agent.model`,
+`agent.tool`, or `agent.edit`. A tool span sets `traces.action` when its native
+name maps to a generic action such as `shell`, `search`, `edit`, or `delegate`.
+The core uses the native name as a fallback and contains no per-provider map.
+
 The `diff.render` action receives `.Local`, `.Remote`, `.Merged`, `.Width`, and
 `.Color` template data. Without a diff provider, Traces uses its built-in
 renderer. Rendered diffs are cached by provider manifest, width, and patch.
@@ -73,7 +78,9 @@ Traces discovers manifests in this order. The first manifest for a name wins:
 
 Harness readers live in `extras/` as separate binaries. Private providers can
 stay in downstream configuration without changing or rebuilding Traces. Use
-`providers/<name>/provider.yaml` for the manifest layout.
+`providers/<name>/provider.yaml` for the installed manifest layout. A bundled
+provider directory also supplies `default.nix` and its command source. This
+keeps its runtime dependencies inside that provider package.
 
 Inspect and test providers without opening the TUI:
 
@@ -84,7 +91,7 @@ traces provider validate codex
 ```
 
 Validation checks the manifest, templates, dependencies, and executable. It
-also probes `activity.read` or `diff.render` when the provider supplies one.
+probes every advertised activity, session, and diff action in isolation.
 
 Generate the schema and command reference with `traces generate`. CI uses
 `traces generate --check` to reject stale output.
@@ -150,6 +157,7 @@ Validate provider commands and protocol output
 nix develop
 go test -race ./...
 go run . generate --check
+./hack/check-provider-neutral.sh
 nix flake check
 ./hack/screenshots.sh
 ```

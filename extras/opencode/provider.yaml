@@ -3,11 +3,11 @@ version: provider/v1
 name: opencode
 description: Read OpenCode exported session activity
 command: [traces-provider-opencode]
+requires:
+  commands: [opencode]
 defaults:
   timeout: 2m
   priority: 100
-requires:
-  commands: [opencode]
 actions:
   activity.read:
     description: Read activity inside a time, session, and directory window

@@ -9,7 +9,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/roshbhatia/traces/extras/internal/opencode"
+	"github.com/roshbhatia/traces/extras/opencode/internal/opencode"
 	"github.com/roshbhatia/traces/internal/source"
 )
 

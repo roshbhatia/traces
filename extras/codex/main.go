@@ -8,7 +8,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/roshbhatia/traces/extras/internal/rollout"
+	"github.com/roshbhatia/traces/extras/codex/internal/rollout"
 	"github.com/roshbhatia/traces/internal/source"
 )
 

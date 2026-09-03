@@ -11,6 +11,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"text/template"
 	"time"
 
 	"github.com/roshbhatia/traces/internal/otlp"
@@ -292,6 +293,9 @@ func addTool(batch *otlp.Batch, info sessionInfo, parent *turn, message messageI
 	attrs["tool_name"] = first(item.Tool, "tool")
 	attrs["tool_use_id"] = id
 	attrs["tool_input"] = toolInput(item, cwd)
+	if action := actionOf(item.Tool); action != "" {
+		attrs["traces.action"] = action
+	}
 	name := "agent.tool"
 	if editAction(item.Tool) {
 		name = "agent.edit"
@@ -338,6 +342,27 @@ func editAction(tool string) bool {
 	return false
 }
 
+// actionOf translates this provider's tool vocabulary into the generic actions
+// that Traces renders. Unknown tools keep their own names.
+func actionOf(tool string) string {
+	switch strings.ToLower(tool) {
+	case "agent", "task":
+		return "delegate"
+	case "apply_patch", "edit", "write":
+		return "edit"
+	case "bash", "shell":
+		return "shell"
+	case "glob", "grep", "web.search", "websearch":
+		return "search"
+	case "read":
+		return "read"
+	case "update_plan":
+		return "plan"
+	default:
+		return ""
+	}
+}
+
 func editPatch(files []editFile, fallback, cwd string) (string, int, int, int) {
 	if len(files) == 0 {
 		added, removed := churn(fallback)
@@ -350,11 +375,28 @@ func editPatch(files []editFile, fallback, cwd string) (string, int, int, int) {
 		if at := strings.Index(body, "@@"); at >= 0 {
 			body = body[at:]
 		}
-		parts = append(parts, "--- "+path+"\n+++ "+path+"\n"+body)
+		parts = append(parts, renderPatch(editPatchTemplate, editPatchView{Path: path, Body: body}))
 		added += file.Additions
 		removed += file.Deletions
 	}
 	return strings.Join(parts, "\n"), len(files), added, removed
+}
+
+type editPatchView struct {
+	Path string
+	Body string
+}
+
+var editPatchTemplate = template.Must(template.New("edit patch").Option("missingkey=error").Parse(`--- {{ .Path }}
++++ {{ .Path }}
+{{ .Body }}`))
+
+func renderPatch(parsed *template.Template, data any) string {
+	var output strings.Builder
+	if err := parsed.Execute(&output, data); err != nil {
+		panic(err)
+	}
+	return output.String()
 }
 
 func toolInput(item part, cwd string) string {
