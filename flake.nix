@@ -134,7 +134,7 @@
               for manifest in extras/*/provider.yaml; do
                 cue vet schema/provider.cue "$manifest" -d '#Manifest'
               done
-              ./hack/check-provider-neutral.sh
+              ${pkgs.bash}/bin/bash ./hack/check-provider-neutral.sh
               runHook postCheck
             '';
             postInstall = ''
@@ -242,7 +242,7 @@
             pkgs.runCommand "traces-provider-neutral" { nativeBuildInputs = [ pkgs.ripgrep ]; }
               ''
                 cd ${./.}
-                ./hack/check-provider-neutral.sh
+                ${pkgs.bash}/bin/bash ./hack/check-provider-neutral.sh
                 touch "$out"
               '';
         }
