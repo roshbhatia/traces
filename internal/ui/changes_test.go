@@ -11,8 +11,10 @@ import (
 	"github.com/charmbracelet/bubbles/viewport"
 	"github.com/charmbracelet/x/ansi"
 
+	sharedprovider "github.com/roshbhatia/go-utils/provider"
 	"github.com/roshbhatia/traces/internal/otlp"
 	"github.com/roshbhatia/traces/internal/session"
+	"github.com/roshbhatia/traces/internal/source"
 )
 
 func TestChangesTabRendersEditOutput(t *testing.T) {
@@ -32,7 +34,7 @@ func TestDiffProviderCachesByContentAndWidth(t *testing.T) {
 	if err := os.WriteFile(provider, []byte(script), 0o700); err != nil {
 		t.Fatal(err)
 	}
-	renderer := newDiffRenderer([]string{provider})
+	renderer := newDiffRenderer(diffProvider("test", []string{provider}, nil))
 	patch := "--- a/file.go\n+++ b/file.go\n@@ -1 +1 @@\n-old\n+new\n"
 	if first, second := renderer.render(patch, 80), renderer.render(patch, 80); first != second || first != "provider view" {
 		t.Fatalf("renders = %q and %q", first, second)
@@ -49,11 +51,21 @@ func TestDiffProviderCachesByContentAndWidth(t *testing.T) {
 func TestDiffProviderAcceptsGitDifftoolArguments(t *testing.T) {
 	t.Setenv("XDG_CACHE_HOME", t.TempDir())
 	patch := "diff --git a/file.go b/file.go\n--- a/file.go\n+++ b/file.go\n@@ -1 +1 @@\n-old\n+new\n"
-	renderer := newDiffRenderer([]string{"git", "diff", "--no-index", "--color=never", "--", "$LOCAL", "$REMOTE"})
+	renderer := newDiffRenderer(diffProvider("git", []string{"git"}, []string{"diff", "--no-index", "--color=never", "--", "{{ .Local }}", "{{ .Remote }}"}))
 	out := renderer.render(patch, 80)
 	if !strings.Contains(out, "-old") || !strings.Contains(out, "+new") {
 		t.Fatalf("difftool output:\n%s", out)
 	}
+}
+
+func diffProvider(name string, command, argv []string) *source.Provider {
+	return &source.Provider{Name: name, Manifest: sharedprovider.Manifest{
+		Version: sharedprovider.Version,
+		Name:    name, Description: name + " diff", Command: command,
+		Actions: map[string]sharedprovider.Action{
+			source.ActionDiffRender: {Description: "render diff", Argv: argv},
+		},
+	}}
 }
 
 func TestInspectorDetectsStructuredOutput(t *testing.T) {

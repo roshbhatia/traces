@@ -9,21 +9,21 @@ builds:
     goos: [darwin, linux]
     goarch: [amd64, arm64]
   - id: traces-provider-claude
-    main: ./extras/traces-provider-claude
+    main: ./extras/claude
     binary: traces-provider-claude
     env:
       - CGO_ENABLED=0
     goos: [darwin, linux]
     goarch: [amd64, arm64]
   - id: traces-provider-codex
-    main: ./extras/traces-provider-codex
+    main: ./extras/codex
     binary: traces-provider-codex
     env:
       - CGO_ENABLED=0
     goos: [darwin, linux]
     goarch: [amd64, arm64]
   - id: traces-provider-opencode
-    main: ./extras/traces-provider-opencode
+    main: ./extras/opencode
     binary: traces-provider-opencode
     env:
       - CGO_ENABLED=0
@@ -34,6 +34,15 @@ archives:
   - formats: [tar.gz]
     name_template: >-
       {{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}
+    files:
+      - src: extras/claude/provider.yaml
+        dst: share/traces/providers/claude/provider.yaml
+      - src: extras/codex/provider.yaml
+        dst: share/traces/providers/codex/provider.yaml
+      - src: extras/git/provider.yaml
+        dst: share/traces/providers/git/provider.yaml
+      - src: extras/opencode/provider.yaml
+        dst: share/traces/providers/opencode/provider.yaml
 
 checksum:
   name_template: checksums.txt

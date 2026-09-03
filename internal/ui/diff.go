@@ -1,13 +1,11 @@
 package ui
 
 import (
-	"bytes"
 	"context"
 	"crypto/sha256"
-	"errors"
+	"encoding/json"
 	"fmt"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -15,24 +13,26 @@ import (
 	"time"
 
 	"github.com/roshbhatia/go-utils/diffview"
+	"github.com/roshbhatia/traces/internal/source"
 )
 
 type diffRenderer struct {
-	command []string
-	mu      sync.Mutex
-	cache   map[string]string
+	provider *source.Provider
+	mu       sync.Mutex
+	cache    map[string]string
 }
 
-func newDiffRenderer(commands ...[]string) *diffRenderer {
-	var command []string
-	if len(commands) > 0 {
-		command = commands[0]
+func newDiffRenderer(providers ...*source.Provider) *diffRenderer {
+	var selected *source.Provider
+	if len(providers) > 0 {
+		selected = providers[0]
 	}
-	return &diffRenderer{command: command, cache: map[string]string{}}
+	return &diffRenderer{provider: selected, cache: map[string]string{}}
 }
 
 func (renderer *diffRenderer) render(patch string, width int) string {
-	key := fmt.Sprintf("%x", sha256.Sum256([]byte(strings.Join(renderer.command, "\x00")+"\x00"+strconv.Itoa(width)+"\x00"+patch)))
+	manifest, _ := json.Marshal(renderer.provider)
+	key := fmt.Sprintf("%x", sha256.Sum256([]byte(string(manifest)+"\x00"+strconv.Itoa(width)+"\x00"+patch)))
 	renderer.mu.Lock()
 	if cached, ok := renderer.cache[key]; ok {
 		renderer.mu.Unlock()
@@ -60,7 +60,7 @@ func (renderer *diffRenderer) remember(key, output string) {
 }
 
 func (renderer *diffRenderer) external(patch string, width int) string {
-	if len(renderer.command) == 0 {
+	if renderer.provider == nil {
 		return ""
 	}
 	files := diffview.Parse(patch)
@@ -90,30 +90,13 @@ func (renderer *diffRenderer) external(patch string, width int) string {
 }
 
 func (renderer *diffRenderer) run(local, remote, merged string, width int) string {
-	command := expandDiffCommand(renderer.command, local, remote, merged, width)
-	if !hasDiffFiles(renderer.command) {
-		command = append(command, local, remote)
-	}
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
-	process := exec.CommandContext(ctx, command[0], command[1:]...)
-	process.Env = append(os.Environ(),
-		"LOCAL="+local,
-		"REMOTE="+remote,
-		"MERGED="+merged,
-		"TRACES_DIFF_COLOR=always",
-		"TRACES_DIFF_WIDTH="+strconv.Itoa(width),
-	)
-	var stdout bytes.Buffer
-	process.Stdout = &stdout
-	err := process.Run()
+	output, err := renderer.provider.RenderDiff(ctx, local, remote, merged, width)
 	if err != nil {
-		var exit *exec.ExitError
-		if !errors.As(err, &exit) || exit.ExitCode() != 1 {
-			return ""
-		}
+		return ""
 	}
-	return strings.TrimSpace(stdout.String())
+	return output
 }
 
 func writeFragments(local, remote string, file diffview.File) error {
@@ -138,28 +121,6 @@ func writeFragments(local, remote string, file diffview.File) error {
 		return err
 	}
 	return os.WriteFile(remote, []byte(strings.Join(newLines, "\n")+"\n"), 0o600)
-}
-
-func expandDiffCommand(command []string, local, remote, merged string, width int) []string {
-	out := make([]string, len(command))
-	for index, argument := range command {
-		out[index] = strings.NewReplacer(
-			"$LOCAL", local,
-			"$REMOTE", remote,
-			"$MERGED", merged,
-			"$WIDTH", strconv.Itoa(width),
-		).Replace(argument)
-	}
-	return out
-}
-
-func hasDiffFiles(command []string) bool {
-	for _, argument := range command {
-		if strings.Contains(argument, "$LOCAL") || strings.Contains(argument, "$REMOTE") {
-			return true
-		}
-	}
-	return false
 }
 
 func diffCachePath(key string) string {

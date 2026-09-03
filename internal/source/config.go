@@ -2,6 +2,8 @@ package source
 
 import (
 	"maps"
+	"os"
+	"path/filepath"
 	"slices"
 	"sort"
 	"strings"
@@ -9,33 +11,44 @@ import (
 	sharedconfig "github.com/roshbhatia/go-utils/config"
 )
 
-// Manifest declares one external source provider and its advertised abilities.
-type Manifest struct {
-	Command      []string `json:"command" yaml:"command" jsonschema:"required,minItems=1"`
-	Capabilities []string `json:"capabilities" yaml:"capabilities" jsonschema:"required,minItems=1"`
-	Description  string   `json:"description,omitempty" yaml:"description"`
-}
-
 // Diff configures a Git-compatible difftool command.
 type Diff struct {
-	Command []string `json:"command,omitempty" yaml:"command"`
+	Provider string `json:"provider,omitempty" yaml:"provider"`
+}
+
+// Providers configures external provider discovery.
+type Providers struct {
+	Directory string `json:"directory,omitempty" yaml:"directory"`
 }
 
 // Settings is the public Traces YAML surface.
 type Settings struct {
 	Color     string              `json:"color,omitempty" yaml:"color" jsonschema:"enum=auto,enum=always,enum=never"`
 	Diff      Diff                `json:"diff,omitempty" yaml:"diff"`
-	Providers map[string]Manifest `json:"providers,omitempty" yaml:"providers"`
+	Providers Providers           `json:"providers,omitempty" yaml:"providers"`
 	Sources   map[string][]string `json:"sources,omitempty" yaml:"sources"`
 }
 
 // Default keeps the core independent from every harness and difftool.
 func Default() Settings {
 	return Settings{
-		Color:     "auto",
-		Providers: map[string]Manifest{},
-		Sources:   map[string][]string{},
+		Color: "auto",
+		Providers: Providers{
+			Directory: defaultProviderDirectory(),
+		},
+		Sources: map[string][]string{},
 	}
+}
+
+func defaultProviderDirectory() string {
+	if root := strings.TrimSpace(os.Getenv("XDG_CONFIG_HOME")); filepath.IsAbs(root) {
+		return filepath.Join(root, "traces", "providers")
+	}
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return filepath.Join(".config", "traces", "providers")
+	}
+	return filepath.Join(home, ".config", "traces", "providers")
 }
 
 // LoadSettings applies YAML and TRACES_* environment overrides.

@@ -35,46 +35,45 @@ workflows.
 
 Traces loads `~/.config/traces/config.yaml`. Set `TRACES_CONFIG` to select
 another file. Nested environment names override YAML, such as
-`TRACES_COLOR=never` or a YAML list in `TRACES_DIFF_COMMAND`.
+`TRACES_COLOR=never`, `TRACES_PROVIDERS_DIRECTORY`, or
+`TRACES_DIFF_PROVIDER=git`.
 
 ```yaml
 # yaml-language-server: $schema=https://raw.githubusercontent.com/roshbhatia/traces/main/schema/traces.schema.json
 color: auto
-providers:
-  claude:
-    description: Read Claude Code transcript activity
-    command: [traces-provider-claude]
-    capabilities: [activity]
-  codex:
-    description: Read Codex rollout activity
-    command: [traces-provider-codex]
-    capabilities: [activity]
-  opencode:
-    description: Read OpenCode session activity
-    command: [traces-provider-opencode]
-    capabilities: [activity]
 sources:
   claude-code: [claude]
   codex: [codex]
   codex_cli_rs: [codex]
   opencode: [opencode]
 diff:
-  command: [difft, --color, always, --display, inline, $LOCAL, $REMOTE]
+  provider: git
 ```
 
-A source provider receives `--since` and `--session`. Traces also exports
-`TRACES_DIRECTORY` and `TRACES_SESSION`. The provider writes newline-delimited
+Provider manifests use the shared `provider/v1` contract. Traces recognizes
+four capabilities: `activity.read`, `session.current`, `session.discover`, and
+`diff.render`. Each action defines direct argv and environment Go templates.
+Traces never inserts a shell. An activity provider writes newline-delimited
 spans and events to standard output. Several providers may serve one harness.
 Traces merges their output and removes duplicate spans.
 
-The diff command follows Git difftool conventions. Traces expands `$LOCAL`,
-`$REMOTE`, `$MERGED`, and `$WIDTH`, and exports the same file variables. If the
-command has no file placeholders, Traces appends the local and remote paths.
-Without a command, Traces uses its built-in renderer. Rendered diffs are cached
-by command, width, and patch under the user cache directory.
+The `diff.render` action receives `.Local`, `.Remote`, `.Merged`, `.Width`, and
+`.Color` template data. Without a diff provider, Traces uses its built-in
+renderer. Rendered diffs are cached by provider manifest, width, and patch.
+
+Traces discovers manifests in this order. The first manifest for a name wins:
+
+1. `providers.directory` in the Traces configuration. It defaults to
+   `~/.config/traces/providers`.
+2. Each directory in `TRACES_PROVIDER_PATH`.
+3. `share/traces/providers` beside a flat release executable.
+4. `../share/traces/providers` beside an installed `bin/traces`.
+5. `$XDG_DATA_HOME/traces/providers`.
+6. Each `$XDG_DATA_DIRS` entry under `traces/providers`.
 
 Harness readers live in `extras/` as separate binaries. Private providers can
-stay in downstream configuration without changing or rebuilding Traces.
+stay in downstream configuration without changing or rebuilding Traces. Use
+`providers/<name>/provider.yaml` for the manifest layout.
 
 Inspect and test providers without opening the TUI:
 
@@ -84,8 +83,8 @@ traces provider validate
 traces provider validate codex
 ```
 
-Validation checks the YAML manifest, resolves the executable, runs a bounded
-zero-length activity query, and verifies every returned protocol line.
+Validation checks the manifest, templates, dependencies, and executable. It
+also probes `activity.read` or `diff.render` when the provider supplies one.
 
 Generate the schema and command reference with `traces generate`. CI uses
 `traces generate --check` to reject stale output.
@@ -123,11 +122,11 @@ Generate README command docs and JSON Schema
 
 ### `traces provider`
 
-Inspect and validate activity providers
+Inspect and validate external providers
 
 ### `traces provider list`
 
-List configured activity providers
+List discovered providers
 
 | Option | Description |
 | --- | --- |

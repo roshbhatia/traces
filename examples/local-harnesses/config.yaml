@@ -1,18 +1,5 @@
 # yaml-language-server: $schema=https://raw.githubusercontent.com/roshbhatia/traces/main/schema/traces.schema.json
 color: auto
-providers:
-  claude:
-    description: Read Claude Code transcript activity
-    command: [traces-provider-claude]
-    capabilities: [activity]
-  codex:
-    description: Read Codex rollout activity
-    command: [traces-provider-codex]
-    capabilities: [activity]
-  opencode:
-    description: Read OpenCode session activity
-    command: [traces-provider-opencode]
-    capabilities: [activity]
 sources:
   claude-code: [claude]
   codex: [codex]

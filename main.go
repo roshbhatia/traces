@@ -26,7 +26,7 @@ import (
 
 	"github.com/roshbhatia/go-utils/completion"
 	"github.com/roshbhatia/go-utils/paths"
-	"github.com/roshbhatia/traces/internal/attach"
+	sharedprovider "github.com/roshbhatia/go-utils/provider"
 	"github.com/roshbhatia/traces/internal/otlp"
 	"github.com/roshbhatia/traces/internal/session"
 	"github.com/roshbhatia/traces/internal/source"
@@ -48,6 +48,11 @@ func main() {
 	}
 	configPath := argumentValue(os.Args[1:], "config")
 	settings, err := source.LoadSettings(configPath)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "traces: %v\n", err)
+		os.Exit(1)
+	}
+	registry, err := source.Discover(settings)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "traces: %v\n", err)
 		os.Exit(1)
@@ -80,20 +85,26 @@ func main() {
 	// traces opens on the work in front of the reader. Inside an agent session
 	// that is the session itself, and outside one it is whatever ran in this
 	// directory, which Claude Code already records per directory.
-	which := attached(*pinned, *all)
 	scope := []string{}
 	directory := ""
 	if !*all && *pinned == "" {
 		if here, err := os.Getwd(); err == nil {
-			scope = attach.Scope(here)
 			directory = here
+			ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+			scope = registry.DiscoverSessions(ctx, here)
+			cancel()
 		}
 	}
+	which := attached(*pinned, *all, registry, directory)
 
-	providers, err := source.Resolve(*asked, *service, settings)
+	providers, err := source.ResolveRegistry(*asked, *service, settings, registry)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "traces: %v\n", err)
 		os.Exit(1)
+	}
+	diffProvider, err := source.ResolveNamed(settings.Diff.Provider, source.ActionDiffRender, registry)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "traces: skipped diff provider: %v\n", err)
 	}
 	for _, one := range providers {
 		one.Session = which
@@ -114,7 +125,7 @@ func main() {
 	// local telemetry and command-backed activity visible in one view.
 	src := sources{
 		path: path, providers: providers, back: *back, every: *every, lag: *lag,
-		service: *service, diffCommand: settings.Diff.Command,
+		service: *service, diffProvider: diffProvider,
 	}
 
 	if *asJSON || *list || *once {
@@ -163,9 +174,9 @@ func commandMetadata() completion.Command {
 			},
 		}, {
 			Name:        "provider",
-			Description: "Inspect and validate activity providers",
+			Description: "Inspect and validate external providers",
 			Subcommands: []completion.Command{
-				{Name: "list", Description: "List configured activity providers", Flags: []completion.Flag{{Name: "config", Description: "YAML configuration file", Value: true}, {Name: "json", Description: "Print JSON"}}},
+				{Name: "list", Description: "List discovered providers", Flags: []completion.Flag{{Name: "config", Description: "YAML configuration file", Value: true}, {Name: "json", Description: "Print JSON"}}},
 				{Name: "validate", Description: "Validate provider commands and protocol output", Flags: []completion.Flag{{Name: "config", Description: "YAML configuration file", Value: true}, {Name: "json", Description: "Print JSON"}}},
 			},
 		}},
@@ -193,14 +204,15 @@ func runProvider(args []string) {
 		fmt.Fprintf(os.Stderr, "traces: %v\n", err)
 		os.Exit(1)
 	}
-	names := make([]string, 0, len(settings.Providers))
-	for name := range settings.Providers {
-		names = append(names, name)
+	registry, err := source.Discover(settings)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "traces: %v\n", err)
+		os.Exit(1)
 	}
-	slices.Sort(names)
+	names := registry.Names()
 	if flags.NArg() == 1 {
 		selected := flags.Arg(0)
-		if _, ok := settings.Providers[selected]; !ok {
+		if _, ok := registry[selected]; !ok {
 			fmt.Fprintf(os.Stderr, "traces: unknown provider %q\n", selected)
 			os.Exit(1)
 		}
@@ -208,21 +220,27 @@ func runProvider(args []string) {
 	}
 	if action == "list" {
 		if *asJSON {
-			data, _ := json.Marshal(settings.Providers)
+			data, _ := json.Marshal(registry)
 			fmt.Println(string(data))
 			return
 		}
 		if len(names) == 0 {
-			fmt.Println("No activity providers are configured.")
+			fmt.Println("No providers were discovered.")
 			return
 		}
 		for _, name := range names {
-			manifest := settings.Providers[name]
+			loaded := registry[name]
+			manifest := loaded.Manifest
 			description := manifest.Description
 			if description == "" {
 				description = "Agent activity source"
 			}
-			fmt.Printf("%s\n  %s\n  provides  %s\n  command   %s\n", name, description, strings.Join(manifest.Capabilities, ", "), strings.Join(manifest.Command, " "))
+			actions := make([]string, 0, len(manifest.Actions))
+			for action := range manifest.Actions {
+				actions = append(actions, action)
+			}
+			slices.Sort(actions)
+			fmt.Printf("%s\n  %s\n  source    %s\n  provides  %s\n  command   %s\n", name, description, loaded.Path, strings.Join(actions, ", "), strings.Join(manifest.Command, " "))
 		}
 		return
 	}
@@ -231,7 +249,7 @@ func runProvider(args []string) {
 		if *asJSON {
 			fmt.Println("[]")
 		} else {
-			fmt.Println("No activity providers are configured.")
+			fmt.Println("No providers were discovered.")
 		}
 		return
 	}
@@ -239,7 +257,7 @@ func runProvider(args []string) {
 	failed := false
 	for _, name := range names {
 		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-		result := source.Validate(ctx, name, settings.Providers[name], directory)
+		result := source.Validate(ctx, name, registry[name], directory)
 		cancel()
 		results = append(results, result)
 		failed = failed || result.Status != "ok"
@@ -253,7 +271,7 @@ func runProvider(args []string) {
 			if result.Status != "ok" {
 				mark = "x"
 			}
-			fmt.Printf("%s %s · activity\n", mark, result.Name)
+			fmt.Printf("%s %s · %s\n", mark, result.Name, strings.Join(result.Provides, ", "))
 			for _, check := range result.Checks {
 				checkMark := "+"
 				if check.Status != "ok" {
@@ -284,6 +302,11 @@ func runGenerate(args []string) {
 		fmt.Fprintf(os.Stderr, "traces: %v\n", err)
 		os.Exit(1)
 	}
+	providerSchema, err := sharedprovider.Schema()
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "traces: %v\n", err)
+		os.Exit(1)
+	}
 	readme, err := os.ReadFile("README.md")
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "traces: read README.md: %v\n", err)
@@ -295,8 +318,9 @@ func runGenerate(args []string) {
 		os.Exit(1)
 	}
 	outputs := map[string][]byte{
-		"README.md":                 []byte(generated),
-		"schema/traces.schema.json": schema,
+		"README.md":                   []byte(generated),
+		"schema/traces.schema.json":   schema,
+		"schema/provider.schema.json": providerSchema,
 	}
 	for path, data := range outputs {
 		if *check {
@@ -337,25 +361,27 @@ func argumentValue(args []string, name string) string {
 
 // attached names the run to open. A flag wins, then the session this process
 // was started inside.
-func attached(pinned string, all bool) string {
+func attached(pinned string, all bool, registry source.Registry, directory string) string {
 	if pinned != "" {
 		return pinned
 	}
 	if all {
 		return ""
 	}
-	return attach.Current()
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	return registry.CurrentSession(ctx, directory)
 }
 
 // sources is every place this machine keeps spans.
 type sources struct {
-	path        string
-	providers   []*source.Provider
-	back        time.Duration
-	every       time.Duration
-	lag         time.Duration
-	service     string
-	diffCommand []string
+	path         string
+	providers    []*source.Provider
+	back         time.Duration
+	every        time.Duration
+	lag          time.Duration
+	service      string
+	diffProvider *source.Provider
 }
 
 // name says what the frame is reading, so an empty view names the source that
@@ -694,16 +720,16 @@ func (s sources) watch(which string, scope []string, directory string) int {
 		}
 	}()
 
-	return run(batches, stop, which, scope, directory, s.name(), s.diffCommand)
+	return run(batches, stop, which, scope, directory, s.name(), s.diffProvider)
 }
 
 // run owns the program either way. Follow owns its own goroutine, so the spans
 // arrive as messages rather than as a blocking read inside Update.
-func run(batches chan otlp.Batch, stop chan struct{}, which string, scope []string, directory, from string, diffCommand []string) int {
+func run(batches chan otlp.Batch, stop chan struct{}, which string, scope []string, directory, from string, diffProvider *source.Provider) int {
 	store := session.NewStore()
 	store.Scope(scope, directory)
 	program := tea.NewProgram(
-		ui.New(store, which, from, diffCommand),
+		ui.New(store, which, from, diffProvider),
 		tea.WithAltScreen(),
 		tea.WithMouseCellMotion(),
 	)

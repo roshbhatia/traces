@@ -1,0 +1,21 @@
+# yaml-language-server: $schema=../../schema/provider.schema.json
+version: provider/v1
+name: claude
+description: Read Claude Code transcript activity and directory sessions
+command: [traces-provider-claude]
+defaults:
+  timeout: 2m
+  priority: 100
+actions:
+  activity.read:
+    description: Read activity inside a time and session window
+    argv: [--since, "{{ .Since }}", --session, "{{ .Session }}", --directory, "{{ .Directory }}"]
+    env:
+      TRACES_DIRECTORY: "{{ .Directory }}"
+      TRACES_SESSION: "{{ .Session }}"
+  session.current:
+    description: Read the current Claude session from its environment
+    argv: [--action, current]
+  session.discover:
+    description: Find recent Claude sessions bound to a workspace directory
+    argv: [--action, discover, --directory, "{{ .Directory }}"]

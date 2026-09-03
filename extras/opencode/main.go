@@ -6,6 +6,7 @@ import (
 	"flag"
 	"fmt"
 	"os"
+	"strings"
 	"time"
 
 	"github.com/roshbhatia/traces/extras/internal/opencode"
@@ -13,10 +14,15 @@ import (
 )
 
 func main() {
+	action := flag.String("action", "activity", "provider action")
 	since := flag.Duration("since", 2*time.Hour, "activity window")
 	session := flag.String("session", "", "session id or prefix")
 	directory := flag.String("directory", os.Getenv("TRACES_DIRECTORY"), "workspace directory")
 	flag.Parse()
+	if *action == "current" {
+		fmt.Println(firstEnvironment("OPENCODE_SESSION_ID"))
+		return
+	}
 	batch, err := opencode.Read(context.Background(), "opencode", *since, *session, *directory)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, err)
@@ -26,4 +32,13 @@ func main() {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
 	}
+}
+
+func firstEnvironment(names ...string) string {
+	for _, name := range names {
+		if value := strings.TrimSpace(os.Getenv(name)); value != "" {
+			return value
+		}
+	}
+	return ""
 }

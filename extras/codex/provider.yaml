@@ -1,0 +1,18 @@
+# yaml-language-server: $schema=../../schema/provider.schema.json
+version: provider/v1
+name: codex
+description: Read Codex rollout activity
+command: [traces-provider-codex]
+defaults:
+  timeout: 2m
+  priority: 100
+actions:
+  activity.read:
+    description: Read activity inside a time and session window
+    argv: [--since, "{{ .Since }}", --session, "{{ .Session }}", --directory, "{{ .Directory }}"]
+    env:
+      TRACES_DIRECTORY: "{{ .Directory }}"
+      TRACES_SESSION: "{{ .Session }}"
+  session.current:
+    description: Read the current Codex session from its environment
+    argv: [--action, current]

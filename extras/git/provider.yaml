@@ -1,0 +1,17 @@
+# yaml-language-server: $schema=../../schema/provider.schema.json
+version: provider/v1
+name: git
+description: Render a two-file diff with Git
+command: [git]
+defaults:
+  timeout: 5s
+actions:
+  diff.render:
+    description: Render a Git-compatible two-file diff
+    argv: [diff, --no-index, --color=always, --, "{{ .Local }}", "{{ .Remote }}"]
+    env:
+      LOCAL: "{{ .Local }}"
+      REMOTE: "{{ .Remote }}"
+      MERGED: "{{ .Merged }}"
+      TRACES_DIFF_COLOR: "{{ .Color }}"
+      TRACES_DIFF_WIDTH: "{{ .Width }}"

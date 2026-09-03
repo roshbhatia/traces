@@ -25,6 +25,7 @@ import (
 
 	"github.com/roshbhatia/traces/internal/otlp"
 	"github.com/roshbhatia/traces/internal/session"
+	"github.com/roshbhatia/traces/internal/source"
 )
 
 // The layout came out of four variations judged against a fixed fixture. The
@@ -257,7 +258,7 @@ type Model struct {
 // inspector box on every frame.
 const paneChrome = 3
 
-func New(store *session.Store, pinned, source string, diffCommands ...[]string) Model {
+func New(store *session.Store, pinned, sourceName string, diffProviders ...*source.Provider) Model {
 	// lipgloss asks the terminal for its background on first render, and Bubble
 	// Tea v1 reads the reply as a burst of keys: a hex digit `d` in the answer
 	// paged the view and cleared follow before anyone touched the keyboard.
@@ -266,14 +267,14 @@ func New(store *session.Store, pinned, source string, diffCommands ...[]string) 
 	lipgloss.SetColorProfile(termenv.ANSI)
 	lipgloss.SetHasDarkBackground(true)
 
-	var diffCommand []string
-	if len(diffCommands) > 0 {
-		diffCommand = diffCommands[0]
+	var diffProvider *source.Provider
+	if len(diffProviders) > 0 {
+		diffProvider = diffProviders[0]
 	}
 	m := Model{
 		store:  store,
 		pinned: pinned,
-		source: source,
+		source: sourceName,
 		marks:  map[string]bool{},
 		folded: map[string]bool{},
 		width:  0,
@@ -285,7 +286,7 @@ func New(store *session.Store, pinned, source string, diffCommands ...[]string) 
 		split:  50,
 		pane:   viewport.New(52, 20),
 		spin:   spinner.New(spinner.WithSpinner(spinner.MiniDot), spinner.WithStyle(live)),
-		diffs:  newDiffRenderer(diffCommand),
+		diffs:  newDiffRenderer(diffProvider),
 		now:    time.Now(),
 	}
 	m.reload()

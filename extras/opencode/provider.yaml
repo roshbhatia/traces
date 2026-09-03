@@ -1,0 +1,20 @@
+# yaml-language-server: $schema=../../schema/provider.schema.json
+version: provider/v1
+name: opencode
+description: Read OpenCode exported session activity
+command: [traces-provider-opencode]
+defaults:
+  timeout: 2m
+  priority: 100
+requires:
+  commands: [opencode]
+actions:
+  activity.read:
+    description: Read activity inside a time, session, and directory window
+    argv: [--since, "{{ .Since }}", --session, "{{ .Session }}", --directory, "{{ .Directory }}"]
+    env:
+      TRACES_DIRECTORY: "{{ .Directory }}"
+      TRACES_SESSION: "{{ .Session }}"
+  session.current:
+    description: Read the current OpenCode session from its environment
+    argv: [--action, current]
