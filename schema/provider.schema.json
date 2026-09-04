@@ -76,7 +76,10 @@
       "propertyNames": {
         "enum": [
           "activity.read",
+          "clipboard.write",
           "diff.render",
+          "document.open",
+          "provider.validate",
           "session.current",
           "session.discover"
         ]

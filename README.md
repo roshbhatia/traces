@@ -16,6 +16,33 @@ from one binding registry.
 
 ## Use it
 
+Install only the provider-neutral core:
+
+```bash
+nix profile install github:roshbhatia/traces
+```
+
+Install every bundled provider beside the core, or select only the extras you
+use. The `full` package combines the core with every bundled provider.
+Nix packages support Apple Silicon macOS and ARM or x86-64 Linux.
+
+```bash
+nix profile install github:roshbhatia/traces github:roshbhatia/traces#extras
+nix profile install github:roshbhatia/traces#full
+nix profile install github:roshbhatia/traces#provider-codex
+nix profile install github:roshbhatia/traces#provider-git
+```
+
+Install the provider-neutral core and its shell completions with Homebrew:
+
+```bash
+brew install --cask roshbhatia/tap/traces
+```
+
+`go install github.com/roshbhatia/traces@latest` also installs only the core.
+Install providers separately or write a provider manifest for the external
+commands you use.
+
 ```bash
 # Attach to activity for the current directory.
 traces
@@ -36,7 +63,8 @@ workflows.
 Traces loads `~/.config/traces/config.yaml`. Set `TRACES_CONFIG` to select
 another file. Nested environment names override YAML, such as
 `TRACES_COLOR=never`, `TRACES_PROVIDERS_DIRECTORY`, or
-`TRACES_DIFF_PROVIDER=git`.
+`TRACES_DIFF_PROVIDER=git`. Use `TRACES_CLIPBOARD_PROVIDER` and
+`TRACES_EDITOR_PROVIDER` to select optional host-action providers.
 
 ```yaml
 # yaml-language-server: $schema=https://raw.githubusercontent.com/roshbhatia/traces/main/schema/traces.schema.json
@@ -48,11 +76,16 @@ sources:
   opencode: [opencode]
 diff:
   provider: git
+clipboard:
+  provider: desktop
+editor:
+  provider: desktop
 ```
 
 Provider manifests use the shared `provider/v1` contract. Traces recognizes
-four capabilities: `activity.read`, `session.current`, `session.discover`, and
-`diff.render`. Each action defines direct argv and environment Go templates.
+seven capabilities: `activity.read`, `session.current`, `session.discover`,
+`diff.render`, `clipboard.write`, `document.open`, and `provider.validate`.
+Each action defines direct argv and environment Go templates.
 Traces never inserts a shell. An activity provider writes newline-delimited
 spans and events to standard output. Several providers may serve one harness.
 Traces merges their output and removes duplicate spans.
@@ -65,6 +98,18 @@ The core uses the native name as a fallback and contains no per-provider map.
 The `diff.render` action receives `.Local`, `.Remote`, `.Merged`, `.Width`, and
 `.Color` template data. Without a diff provider, Traces uses its built-in
 renderer. Rendered diffs are cached by provider manifest, width, and patch.
+
+`clipboard.write` and `document.open` receive `.Path`, which points to a
+temporary file. Traces performs no host action when its provider is absent.
+The bundled `desktop` provider selects the host command. The `full` package
+includes it, but it remains disabled until configuration selects it.
+
+A manifest with `requires` or a side-effect capability must implement
+`provider.validate`. That action checks dependencies from inside the provider
+runtime and returns JSON checks for every declared command, environment name,
+path, and side-effect capability. Traces runs it in an isolated environment.
+It renders clipboard and document actions during validation but never performs
+them.
 
 Traces discovers manifests in this order. The first manifest for a name wins:
 
@@ -90,8 +135,17 @@ traces provider validate
 traces provider validate codex
 ```
 
-Validation checks the manifest, templates, dependencies, and executable. It
-probes every advertised activity, session, and diff action in isolation.
+Validation checks the manifest, templates, provider-owned dependencies, and
+executable. It probes every safe action in isolation and fails if any discovered
+manifest is invalid. Normal interactive discovery reports and skips one invalid
+optional provider so unrelated sources remain available.
+
+Tagged releases publish separate core, full, and per-provider archives. Core
+and full archives include Bash, Zsh, Fish, and Nushell completions, README, and
+LICENSE. The full archive's `traces` launcher resolves its bundled manifests,
+core, and provider binaries relative to itself, so it does not depend on the
+caller's `PATH`. Release archives also include x86-64 macOS binaries for users
+outside the supported Nix systems.
 
 Generate the schema and command reference with `traces generate`. CI uses
 `traces generate --check` to reject stale output.
@@ -139,6 +193,7 @@ List discovered providers
 | --- | --- |
 | `--config` `<value>` | YAML configuration file |
 | `--json` | Print JSON |
+| `--names` | Print provider names, one per line |
 
 ### `traces provider validate`
 

@@ -8,6 +8,20 @@ builds:
       - CGO_ENABLED=0
     goos: [darwin, linux]
     goarch: [amd64, arm64]
+  - id: traces-full-core
+    main: .
+    binary: .traces-core
+    env:
+      - CGO_ENABLED=0
+    goos: [darwin, linux]
+    goarch: [amd64, arm64]
+  - id: traces-full-launcher
+    main: ./cmd/traces-full
+    binary: traces
+    env:
+      - CGO_ENABLED=0
+    goos: [darwin, linux]
+    goarch: [amd64, arm64]
   - id: traces-provider-claude
     main: ./extras/claude
     binary: traces-provider-claude
@@ -29,22 +43,107 @@ builds:
       - CGO_ENABLED=0
     goos: [darwin, linux]
     goarch: [amd64, arm64]
+  - id: traces-provider-git
+    main: ./extras/git
+    binary: traces-provider-git
+    env:
+      - CGO_ENABLED=0
+    goos: [darwin, linux]
+    goarch: [amd64, arm64]
+  - id: traces-provider-desktop
+    main: ./extras/desktop
+    binary: traces-provider-desktop
+    env:
+      - CGO_ENABLED=0
+    goos: [darwin, linux]
+    goarch: [amd64, arm64]
 
 archives:
-  - formats: [tar.gz]
+  - id: core
+    ids: [traces]
+    formats: [tar.gz]
     name_template: >-
       {{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}
     files:
-      - src: extras/git/main.sh
-        dst: traces-provider-git
-        info:
-          mode: 0755
+      - README.md
+      - LICENSE
+      - src: completions/*
+        dst: completions
+  - id: full
+    ids:
+      - traces-full-core
+      - traces-full-launcher
+      - traces-provider-claude
+      - traces-provider-codex
+      - traces-provider-desktop
+      - traces-provider-git
+      - traces-provider-opencode
+    formats: [tar.gz]
+    name_template: >-
+      {{ .ProjectName }}_full_{{ .Version }}_{{ .Os }}_{{ .Arch }}
+    files:
+      - README.md
+      - LICENSE
+      - src: completions/*
+        dst: completions
       - src: extras/claude/provider.yaml
         dst: share/traces/providers/claude/provider.yaml
       - src: extras/codex/provider.yaml
         dst: share/traces/providers/codex/provider.yaml
+      - src: extras/desktop/provider.yaml
+        dst: share/traces/providers/desktop/provider.yaml
       - src: extras/git/provider.yaml
         dst: share/traces/providers/git/provider.yaml
+      - src: extras/opencode/provider.yaml
+        dst: share/traces/providers/opencode/provider.yaml
+  - id: provider-claude
+    ids: [traces-provider-claude]
+    formats: [tar.gz]
+    name_template: >-
+      {{ .ProjectName }}_provider_claude_{{ .Version }}_{{ .Os }}_{{ .Arch }}
+    files:
+      - README.md
+      - LICENSE
+      - src: extras/claude/provider.yaml
+        dst: share/traces/providers/claude/provider.yaml
+  - id: provider-codex
+    ids: [traces-provider-codex]
+    formats: [tar.gz]
+    name_template: >-
+      {{ .ProjectName }}_provider_codex_{{ .Version }}_{{ .Os }}_{{ .Arch }}
+    files:
+      - README.md
+      - LICENSE
+      - src: extras/codex/provider.yaml
+        dst: share/traces/providers/codex/provider.yaml
+  - id: provider-desktop
+    ids: [traces-provider-desktop]
+    formats: [tar.gz]
+    name_template: >-
+      {{ .ProjectName }}_provider_desktop_{{ .Version }}_{{ .Os }}_{{ .Arch }}
+    files:
+      - README.md
+      - LICENSE
+      - src: extras/desktop/provider.yaml
+        dst: share/traces/providers/desktop/provider.yaml
+  - id: provider-git
+    ids: [traces-provider-git]
+    formats: [tar.gz]
+    name_template: >-
+      {{ .ProjectName }}_provider_git_{{ .Version }}_{{ .Os }}_{{ .Arch }}
+    files:
+      - README.md
+      - LICENSE
+      - src: extras/git/provider.yaml
+        dst: share/traces/providers/git/provider.yaml
+  - id: provider-opencode
+    ids: [traces-provider-opencode]
+    formats: [tar.gz]
+    name_template: >-
+      {{ .ProjectName }}_provider_opencode_{{ .Version }}_{{ .Os }}_{{ .Arch }}
+    files:
+      - README.md
+      - LICENSE
       - src: extras/opencode/provider.yaml
         dst: share/traces/providers/opencode/provider.yaml
 
@@ -53,3 +152,26 @@ checksum:
 
 changelog:
   use: github-native
+
+homebrew_casks:
+  - name: traces
+    ids: [core]
+    binaries: [traces]
+    homepage: https://github.com/roshbhatia/traces
+    description: Inspect agent activity as a trace tree
+    license: MIT
+    completions:
+      bash: completions/traces.bash
+      zsh: completions/_traces
+      fish: completions/traces.fish
+    hooks:
+      post:
+        install: |
+          system_command "/bin/mkdir", args: ["-p", "#{HOMEBREW_PREFIX}/share/nushell/vendor/autoload"]
+          system_command "/bin/cp", args: ["#{staged_path}/completions/traces.nu", "#{HOMEBREW_PREFIX}/share/nushell/vendor/autoload/traces.nu"]
+        uninstall: |
+          system_command "/bin/rm", args: ["-f", "#{HOMEBREW_PREFIX}/share/nushell/vendor/autoload/traces.nu"]
+    repository:
+      owner: roshbhatia
+      name: homebrew-tap
+      token: "{{ .Env.HOMEBREW_TAP_TOKEN }}"

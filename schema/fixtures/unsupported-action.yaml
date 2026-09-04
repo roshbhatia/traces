@@ -1,0 +1,7 @@
+version: provider/v1
+name: unsupported-action-fixture
+description: Manifest with an action outside the supported vocabulary
+command: [fixture]
+actions:
+  session.delete:
+    description: This action must fail schema validation

@@ -9,6 +9,9 @@ defaults:
   timeout: 2m
   priority: 100
 actions:
+  provider.validate:
+    description: Check OpenCode inside the provider runtime
+    argv: [--action, validate]
   activity.read:
     description: Read activity inside a time, session, and directory window
     argv: [--since, "{{ .Since }}", --session, "{{ .Session }}", --directory, "{{ .Directory }}"]

@@ -3,9 +3,11 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"flag"
 	"fmt"
 	"os"
+	"os/exec"
 	"strings"
 	"time"
 
@@ -19,6 +21,21 @@ func main() {
 	session := flag.String("session", "", "session id or prefix")
 	directory := flag.String("directory", os.Getenv("TRACES_DIRECTORY"), "workspace directory")
 	flag.Parse()
+	if *action == "validate" {
+		path, err := exec.LookPath("opencode")
+		status, message := "ok", path
+		if err != nil {
+			status, message = "failed", err.Error()
+		}
+		report := map[string]any{"checks": []map[string]string{{
+			"kind": "command", "name": "opencode", "status": status, "message": message,
+		}}}
+		if err := json.NewEncoder(os.Stdout).Encode(report); err != nil {
+			fmt.Fprintln(os.Stderr, err)
+			os.Exit(1)
+		}
+		return
+	}
 	if *action == "current" {
 		fmt.Println(firstEnvironment("OPENCODE_SESSION_ID"))
 		return

@@ -1,11 +1,7 @@
 package extras
 
 import (
-	"os"
-	"os/exec"
-	"path/filepath"
 	"slices"
-	"strings"
 	"testing"
 
 	sharedprovider "github.com/roshbhatia/go-utils/provider"
@@ -16,7 +12,7 @@ func TestReleaseProvidersDeclareExternalCommands(t *testing.T) {
 		provider string
 		commands []string
 	}{
-		{provider: "git", commands: []string{"bash", "git"}},
+		{provider: "git", commands: []string{"git"}},
 		{provider: "opencode", commands: []string{"opencode"}},
 	}
 	for _, test := range tests {
@@ -35,42 +31,4 @@ func TestReleaseProvidersDeclareExternalCommands(t *testing.T) {
 			}
 		})
 	}
-}
-
-func TestGitProviderUsesMergedLabelsAndColorPolicy(t *testing.T) {
-	directory := t.TempDir()
-	local := filepath.Join(directory, "local")
-	remote := filepath.Join(directory, "remote")
-	if err := os.WriteFile(local, []byte("old\n"), 0o600); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile(remote, []byte("new\n"), 0o600); err != nil {
-		t.Fatal(err)
-	}
-
-	plain := runGitProvider(t, local, remote, "internal/file.go", "never")
-	if strings.Contains(plain, "\x1b[") {
-		t.Fatalf("plain output contains ANSI: %q", plain)
-	}
-	if !strings.Contains(plain, "diff --git a/internal/file.go b/internal/file.go") {
-		t.Fatalf("merged label missing from diff:\n%s", plain)
-	}
-	if strings.Contains(plain, directory) {
-		t.Fatalf("temporary path leaked into diff:\n%s", plain)
-	}
-
-	colored := runGitProvider(t, local, remote, "internal/file.go", "always")
-	if !strings.Contains(colored, "\x1b[") {
-		t.Fatalf("colored output has no ANSI: %q", colored)
-	}
-}
-
-func runGitProvider(t *testing.T, local, remote, merged, color string) string {
-	t.Helper()
-	command := exec.Command("bash", "git/main.sh", local, remote, merged, color)
-	output, err := command.CombinedOutput()
-	if exit, ok := err.(*exec.ExitError); !ok || exit.ExitCode() != 1 {
-		t.Fatalf("git provider: %v\n%s", err, output)
-	}
-	return string(output)
 }

@@ -4,10 +4,13 @@ name: git
 description: Render a two-file diff with Git
 command: [traces-provider-git]
 requires:
-  commands: [bash, git]
+  commands: [git]
 defaults:
   timeout: 5s
 actions:
+  provider.validate:
+    description: Check Git inside the provider runtime
+    argv: [--validate]
   diff.render:
     description: Render a Git-compatible two-file diff
     argv: ["{{ .Local }}", "{{ .Remote }}", "{{ .Merged }}", "{{ .Color }}"]

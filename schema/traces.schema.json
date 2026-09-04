@@ -10,6 +10,15 @@
       "additionalProperties": false,
       "type": "object"
     },
+    "Integration": {
+      "properties": {
+        "provider": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": false,
+      "type": "object"
+    },
     "Providers": {
       "properties": {
         "directory": {
@@ -21,6 +30,9 @@
     }
   },
   "properties": {
+    "clipboard": {
+      "$ref": "#/$defs/Integration"
+    },
     "color": {
       "type": "string",
       "enum": [
@@ -31,6 +43,9 @@
     },
     "diff": {
       "$ref": "#/$defs/Diff"
+    },
+    "editor": {
+      "$ref": "#/$defs/Integration"
     },
     "providers": {
       "$ref": "#/$defs/Providers"

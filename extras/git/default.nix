@@ -1,14 +1,13 @@
 {
-  mkShellProvider,
+  mkGoProvider,
   pkgs,
   ...
 }:
 
-mkShellProvider {
+mkGoProvider {
   name = "git";
   directory = ./.;
   runtimeInputs = [
-    pkgs.bash
     pkgs.gitMinimal
   ];
 }

@@ -57,15 +57,21 @@ import (
 const Env = "TRACES_PROVIDER"
 
 const (
-	ActionActivityRead    = "activity.read"
-	ActionSessionCurrent  = "session.current"
-	ActionSessionDiscover = "session.discover"
-	ActionDiffRender      = "diff.render"
+	ActionActivityRead     = "activity.read"
+	ActionClipboardWrite   = "clipboard.write"
+	ActionSessionCurrent   = "session.current"
+	ActionSessionDiscover  = "session.discover"
+	ActionDiffRender       = "diff.render"
+	ActionDocumentOpen     = "document.open"
+	ActionProviderValidate = "provider.validate"
 )
 
 var supportedActionNames = []string{
 	ActionActivityRead,
+	ActionClipboardWrite,
 	ActionDiffRender,
+	ActionDocumentOpen,
+	ActionProviderValidate,
 	ActionSessionCurrent,
 	ActionSessionDiscover,
 }
@@ -98,8 +104,20 @@ type actionData struct {
 	Local     string
 	Remote    string
 	Merged    string
+	Path      string
 	Width     int
 	Color     string
+}
+
+type providerValidationCheck struct {
+	Kind    string `json:"kind"`
+	Name    string `json:"name"`
+	Status  string `json:"status"`
+	Message string `json:"message,omitempty"`
+}
+
+type providerValidationReport struct {
+	Checks []providerValidationCheck `json:"checks"`
 }
 
 // ValidationCheck describes one deterministic provider contract check.
@@ -136,7 +154,16 @@ func Validate(ctx context.Context, name string, loaded sharedprovider.LoadedMani
 	}
 	sort.Strings(provides)
 	result := Validation{Name: name, Provides: provides, Command: append([]string{}, manifest.Command...)}
-	report := (sharedprovider.Validator{}).Validate(manifest, directory)
+	if err := manifest.Validate(); err != nil {
+		result.Checks = append(result.Checks, validationCheck("manifest:"+name, err.Error(), false))
+		result.Status = "failed"
+		return result
+	}
+	manifestDirectory := providerManifestDirectory(loaded.Path, directory)
+	contract := manifest
+	// Wrapper-owned dependencies are checked through `provider.validate`.
+	contract.Requires = sharedprovider.Requirements{}
+	report := (sharedprovider.Validator{}).Validate(contract, manifestDirectory)
 	for _, check := range report.Checks {
 		result.Checks = append(result.Checks, validationCheck(
 			check.Kind+":"+check.Target, check.Message, check.Status == sharedprovider.CheckOK,
@@ -146,6 +173,13 @@ func Validate(ctx context.Context, name string, loaded sharedprovider.LoadedMani
 		result.Status = "failed"
 		return result
 	}
+	resolved, err := resolveProviderCommand(loaded, directory)
+	if err != nil {
+		result.Checks = append(result.Checks, validationCheck("command:resolve", err.Error(), false))
+		result.Status = "failed"
+		return result
+	}
+	manifest = resolved
 	if err := validateSupportedActions(manifest); err != nil {
 		result.Checks = append(result.Checks, validationCheck("manifest:actions", err.Error(), false))
 		result.Status = "failed"
@@ -179,7 +213,8 @@ func Validate(ctx context.Context, name string, loaded sharedprovider.LoadedMani
 	fixture := actionData{
 		Since: "0s", Session: "traces-provider-validation", Directory: workspace,
 		Local: filepath.Join(temporary, "old.txt"), Remote: filepath.Join(temporary, "new.txt"),
-		Merged: filepath.Join(temporary, "example.txt"), Width: 80, Color: "always",
+		Merged: filepath.Join(temporary, "example.txt"), Path: filepath.Join(temporary, "input.txt"),
+		Width: 80, Color: "always",
 	}
 	if err := os.WriteFile(fixture.Local, []byte("old\n"), 0o600); err != nil {
 		result.Checks = append(result.Checks, validationCheck("fixture", err.Error(), false))
@@ -187,6 +222,11 @@ func Validate(ctx context.Context, name string, loaded sharedprovider.LoadedMani
 		return result
 	}
 	if err := os.WriteFile(fixture.Remote, []byte("new\n"), 0o600); err != nil {
+		result.Checks = append(result.Checks, validationCheck("fixture", err.Error(), false))
+		result.Status = "failed"
+		return result
+	}
+	if err := os.WriteFile(fixture.Path, []byte("provider input\n"), 0o600); err != nil {
 		result.Checks = append(result.Checks, validationCheck("fixture", err.Error(), false))
 		result.Status = "failed"
 		return result
@@ -201,9 +241,46 @@ func Validate(ctx context.Context, name string, loaded sharedprovider.LoadedMani
 		}
 		plans[action] = plan
 	}
+	validationRequired := providerValidationRequired(manifest)
+	validationPassed := !validationRequired
+	if plan, ok := plans[ActionProviderValidate]; ok {
+		message, err := validateProviderRequirements(
+			ctx,
+			plan,
+			workspace,
+			environment,
+			manifest.Requires,
+			providerValidationCapabilities(manifest),
+		)
+		if err != nil {
+			result.Checks = append(result.Checks, validationCheck("probe:"+ActionProviderValidate, err.Error(), false))
+			result.Status = "failed"
+		} else {
+			result.Checks = append(result.Checks, validationCheck("probe:"+ActionProviderValidate, message, true))
+			validationPassed = true
+		}
+	} else if validationRequired {
+		result.Checks = append(result.Checks, validationCheck(
+			"probe:"+ActionProviderValidate,
+			"provider.validate is required for declared requirements and side-effect capabilities",
+			false,
+		))
+		result.Status = "failed"
+	}
 	for _, action := range provides {
+		if action == ActionProviderValidate {
+			continue
+		}
 		plan, ok := plans[action]
 		if !ok {
+			continue
+		}
+		if action == ActionClipboardWrite || action == ActionDocumentOpen {
+			if validationPassed {
+				result.Checks = append(result.Checks, validationCheck(
+					"probe:"+action, "rendered without performing the side effect", true,
+				))
+			}
 			continue
 		}
 		message, err := validateAction(ctx, action, plan, workspace, environment)
@@ -215,6 +292,75 @@ func Validate(ctx context.Context, name string, loaded sharedprovider.LoadedMani
 		result.Checks = append(result.Checks, validationCheck("probe:"+action, message, true))
 	}
 	return result
+}
+
+func providerValidationRequired(manifest sharedprovider.Manifest) bool {
+	if len(manifest.Requires.Commands) > 0 || len(manifest.Requires.Environment) > 0 || len(manifest.Requires.Paths) > 0 {
+		return true
+	}
+	return len(providerValidationCapabilities(manifest)) > 0
+}
+
+func providerValidationCapabilities(manifest sharedprovider.Manifest) []string {
+	var capabilities []string
+	for _, action := range []string{ActionClipboardWrite, ActionDocumentOpen} {
+		if _, ok := manifest.Actions[action]; ok {
+			capabilities = append(capabilities, action)
+		}
+	}
+	return capabilities
+}
+
+func validateProviderRequirements(
+	ctx context.Context,
+	plan sharedprovider.Plan,
+	directory string,
+	environment []string,
+	requires sharedprovider.Requirements,
+	capabilities []string,
+) (string, error) {
+	output, stderr, err := runPlanWithEnvironment(ctx, plan, directory, environment)
+	if err != nil {
+		return "", providerCommandError(stderr, err)
+	}
+	var report providerValidationReport
+	if err := json.Unmarshal(bytes.TrimSpace(output), &report); err != nil {
+		return "", fmt.Errorf("provider.validate must return one JSON report: %w", err)
+	}
+	if len(report.Checks) == 0 {
+		return "", fmt.Errorf("provider.validate returned no checks")
+	}
+	passed := map[string]bool{}
+	for _, check := range report.Checks {
+		key := check.Kind + "\x00" + check.Name
+		if check.Kind == "" || check.Name == "" {
+			return "", fmt.Errorf("provider.validate returned an unnamed check")
+		}
+		if check.Status != "ok" {
+			message := strings.TrimSpace(check.Message)
+			if message == "" {
+				message = "check failed"
+			}
+			return "", fmt.Errorf("%s %q: %s", check.Kind, check.Name, message)
+		}
+		passed[key] = true
+	}
+	for _, requirement := range []struct {
+		kind  string
+		names []string
+	}{
+		{kind: "command", names: requires.Commands},
+		{kind: "environment", names: requires.Environment},
+		{kind: "path", names: requires.Paths},
+		{kind: "capability", names: capabilities},
+	} {
+		for _, name := range requirement.names {
+			if !passed[requirement.kind+"\x00"+name] {
+				return "", fmt.Errorf("provider.validate omitted declared %s %q", requirement.kind, name)
+			}
+		}
+	}
+	return fmt.Sprintf("passed %d provider-owned checks", len(report.Checks)), nil
 }
 
 func validateAction(
@@ -627,66 +773,187 @@ func validateOTLPExport(value map[string]json.RawMessage, lineNumber int) error 
 // Discover loads provider manifests from user, environment, package, and XDG
 // data directories. The first manifest for a name wins.
 func Discover(settings Settings) (Registry, error) {
+	registry, issues, err := DiscoverChecked(settings)
+	for _, issue := range issues {
+		fmt.Fprintf(os.Stderr, "traces: skipped provider manifest: %v\n", issue)
+	}
+	return registry, err
+}
+
+// DiscoverChecked returns manifest issues so management commands can fail closed.
+func DiscoverChecked(settings Settings) (Registry, []error, error) {
 	directories := providerDirectories(settings)
 	registry := Registry{}
+	claimed := map[string]string{}
+	var issues []error
 	for _, directory := range directories {
-		loaded, err := discoverDirectory(directory)
+		discovery, err := discoverDirectoryChecked(directory)
 		if err != nil {
-			return nil, err
+			issues = append(issues, err)
+			continue
 		}
-		for _, item := range loaded {
-			if _, exists := registry[item.Manifest.Name]; !exists {
+		issues = append(issues, discovery.issues...)
+		for _, item := range discovery.loaded {
+			if _, exists := claimed[item.Manifest.Name]; !exists {
 				registry[item.Manifest.Name] = item
 			}
 		}
+		for name, path := range discovery.claimed {
+			if _, exists := claimed[name]; !exists {
+				claimed[name] = path
+			}
+		}
 	}
-	return registry, nil
+	return registry, issues, nil
+}
+
+type providerDiscovery struct {
+	loaded  []sharedprovider.LoadedManifest
+	issues  []error
+	claimed map[string]string
 }
 
 // discoverDirectory accepts both a flat manifest directory and the standard
 // providers/<name>/provider.yaml layout. Flat files remain readable so an
 // existing private provider does not break during migration.
-func discoverDirectory(directory string) ([]sharedprovider.LoadedManifest, error) {
-	loaded, err := sharedprovider.Discover(directory)
+func discoverDirectory(directory string) ([]sharedprovider.LoadedManifest, []error, error) {
+	discovery, err := discoverDirectoryChecked(directory)
+	return discovery.loaded, discovery.issues, err
+}
+
+func discoverDirectoryChecked(directory string) (providerDiscovery, error) {
+	discovery, err := discoverManifestFiles(directory)
 	if err != nil {
-		return nil, err
-	}
-	for _, item := range loaded {
-		if err := validateSupportedActions(item.Manifest); err != nil {
-			return nil, fmt.Errorf("%s: %w", item.Path, err)
-		}
+		return providerDiscovery{}, err
 	}
 	entries, err := os.ReadDir(directory)
 	if errors.Is(err, os.ErrNotExist) {
-		return loaded, nil
+		return discovery, nil
 	}
 	if err != nil {
-		return nil, fmt.Errorf("read provider directory %s: %w", directory, err)
-	}
-	seen := make(map[string]string, len(loaded))
-	for _, item := range loaded {
-		seen[item.Manifest.Name] = item.Path
+		return providerDiscovery{}, fmt.Errorf("read provider directory %s: %w", directory, err)
 	}
 	for _, entry := range entries {
-		if !entry.IsDir() {
+		path := filepath.Join(directory, entry.Name())
+		isDirectory, err := providerSubdirectory(path, entry)
+		if err != nil {
+			discovery.issues = append(discovery.issues, err)
 			continue
 		}
-		children, err := sharedprovider.Discover(filepath.Join(directory, entry.Name()))
-		if err != nil {
-			return nil, err
+		if !isDirectory {
+			continue
 		}
-		for _, item := range children {
-			if err := validateSupportedActions(item.Manifest); err != nil {
-				return nil, fmt.Errorf("%s: %w", item.Path, err)
+		children, err := discoverManifestFiles(path)
+		if err != nil {
+			return providerDiscovery{}, err
+		}
+		discovery.issues = append(discovery.issues, children.issues...)
+		for _, name := range sortedClaimNames(children.claimed) {
+			childPath := children.claimed[name]
+			if previous, exists := discovery.claimed[name]; exists {
+				discovery.issues = append(discovery.issues, fmt.Errorf(
+					"duplicate provider %q in %s and %s", name, previous, childPath,
+				))
+				continue
 			}
-			if previous, exists := seen[item.Manifest.Name]; exists {
-				return nil, fmt.Errorf("duplicate provider %q in %s and %s", item.Manifest.Name, previous, item.Path)
+			discovery.claimed[name] = childPath
+		}
+		for _, item := range children.loaded {
+			if discovery.claimed[item.Manifest.Name] == item.Path {
+				discovery.loaded = append(discovery.loaded, item)
 			}
-			seen[item.Manifest.Name] = item.Path
-			loaded = append(loaded, item)
 		}
 	}
-	return loaded, nil
+	return discovery, nil
+}
+
+func providerSubdirectory(path string, entry os.DirEntry) (bool, error) {
+	if entry.IsDir() {
+		return true, nil
+	}
+	if entry.Type()&os.ModeSymlink == 0 {
+		return false, nil
+	}
+	info, err := os.Stat(path)
+	if err != nil {
+		return false, fmt.Errorf("resolve provider directory symlink %s: %w", path, err)
+	}
+	return info.IsDir(), nil
+}
+
+func discoverManifestFiles(directory string) (providerDiscovery, error) {
+	entries, err := os.ReadDir(directory)
+	if errors.Is(err, os.ErrNotExist) {
+		return providerDiscovery{claimed: map[string]string{}}, nil
+	}
+	if err != nil {
+		return providerDiscovery{}, fmt.Errorf("read provider directory %s: %w", directory, err)
+	}
+	discovery := providerDiscovery{
+		loaded:  make([]sharedprovider.LoadedManifest, 0, len(entries)),
+		claimed: map[string]string{},
+	}
+	for _, entry := range entries {
+		if entry.IsDir() {
+			continue
+		}
+		extension := filepath.Ext(entry.Name())
+		if extension != ".json" && extension != ".yaml" && extension != ".yml" {
+			continue
+		}
+		path := filepath.Join(directory, entry.Name())
+		data, err := os.ReadFile(path)
+		if err != nil {
+			claimProviderName(&discovery, providerLogicalName(path, sharedprovider.Manifest{}), path)
+			discovery.issues = append(discovery.issues, fmt.Errorf("read provider manifest %s: %w", path, err))
+			continue
+		}
+		manifest, err := sharedprovider.Decode(bytes.NewReader(data), extension)
+		name := providerLogicalName(path, manifest)
+		if previous, duplicate := discovery.claimed[name]; name != "" && duplicate {
+			discovery.issues = append(discovery.issues, fmt.Errorf(
+				"duplicate provider %q in %s and %s", name, previous, path,
+			))
+			continue
+		}
+		claimProviderName(&discovery, name, path)
+		if err != nil {
+			discovery.issues = append(discovery.issues, fmt.Errorf("decode provider manifest %s: %w", path, err))
+			continue
+		}
+		if err := validateSupportedActions(manifest); err != nil {
+			discovery.issues = append(discovery.issues, fmt.Errorf("%s: %w", path, err))
+			continue
+		}
+		discovery.loaded = append(discovery.loaded, sharedprovider.LoadedManifest{Manifest: manifest, Path: path})
+	}
+	return discovery, nil
+}
+
+func providerLogicalName(path string, manifest sharedprovider.Manifest) string {
+	if manifest.Name != "" {
+		return manifest.Name
+	}
+	base := strings.TrimSuffix(filepath.Base(path), filepath.Ext(path))
+	if base != "provider" {
+		return base
+	}
+	return filepath.Base(filepath.Dir(path))
+}
+
+func claimProviderName(discovery *providerDiscovery, name, path string) {
+	if name != "" {
+		discovery.claimed[name] = path
+	}
+}
+
+func sortedClaimNames(claimed map[string]string) []string {
+	names := make([]string, 0, len(claimed))
+	for name := range claimed {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+	return names
 }
 
 func providerDirectories(settings Settings) []string {
@@ -762,7 +1029,11 @@ func (registry Registry) supporting(action string) []sharedprovider.LoadedManife
 // CurrentSession asks provider capabilities for the native session identity.
 func (registry Registry) CurrentSession(ctx context.Context, directory string) string {
 	for _, loaded := range registry.supporting(ActionSessionCurrent) {
-		plan, err := loaded.Manifest.Render(ActionSessionCurrent, actionData{Directory: directory})
+		manifest, err := resolveProviderCommand(loaded, directory)
+		if err != nil {
+			continue
+		}
+		plan, err := manifest.Render(ActionSessionCurrent, actionData{Directory: directory})
 		if err != nil {
 			continue
 		}
@@ -779,7 +1050,11 @@ func (registry Registry) DiscoverSessions(ctx context.Context, directory string)
 	seen := map[string]bool{}
 	var sessions []string
 	for _, loaded := range registry.supporting(ActionSessionDiscover) {
-		plan, err := loaded.Manifest.Render(ActionSessionDiscover, actionData{Directory: directory})
+		manifest, err := resolveProviderCommand(loaded, directory)
+		if err != nil {
+			continue
+		}
+		plan, err := manifest.Render(ActionSessionDiscover, actionData{Directory: directory})
 		if err != nil {
 			continue
 		}
@@ -866,12 +1141,79 @@ func resolveOne(name string, registry Registry, action string) (*Provider, error
 	if _, ok := loaded.Manifest.Actions[action]; !ok {
 		return nil, fmt.Errorf("provider %q does not advertise %s", name, action)
 	}
-	found, err := exec.LookPath(loaded.Manifest.Command[0])
+	manifest, err := resolveProviderCommand(loaded, "")
 	if err != nil {
 		return nil, fmt.Errorf("provider %q: %w", name, err)
 	}
-	loaded.Manifest.Command = append([]string{found}, loaded.Manifest.Command[1:]...)
-	return &Provider{Manifest: loaded.Manifest, Path: loaded.Path, Name: name}, nil
+	return &Provider{Manifest: manifest, Path: loaded.Path, Name: name}, nil
+}
+
+func providerManifestDirectory(path, fallback string) string {
+	if path != "" {
+		return filepath.Dir(path)
+	}
+	return fallback
+}
+
+func resolveProviderCommand(loaded sharedprovider.LoadedManifest, fallback string) (sharedprovider.Manifest, error) {
+	manifest := loaded.Manifest
+	command := manifest.Command[0]
+	manifestDirectory := providerManifestDirectory(loaded.Path, fallback)
+	var resolved string
+	var err error
+	if strings.ContainsRune(command, filepath.Separator) {
+		resolved = command
+		if !filepath.IsAbs(resolved) {
+			resolved = filepath.Join(manifestDirectory, resolved)
+		}
+		if !filepath.IsAbs(resolved) {
+			resolved, err = filepath.Abs(resolved)
+		}
+		resolved = filepath.Clean(resolved)
+		var info os.FileInfo
+		if err == nil {
+			info, err = os.Stat(resolved)
+		}
+		if err == nil && (info.IsDir() || info.Mode()&0o111 == 0) {
+			err = fmt.Errorf("%s is not executable", resolved)
+		}
+	} else {
+		resolved, err = exec.LookPath(command)
+	}
+	if err != nil {
+		return manifest, fmt.Errorf("resolve command %q: %w", command, err)
+	}
+	manifest.Command = resolveProviderArguments(
+		append([]string{resolved}, manifest.Command[1:]...),
+		manifestDirectory,
+	)
+	return manifest, nil
+}
+
+// resolveProviderArguments anchors explicit relative paths beside the manifest.
+func resolveProviderArguments(command []string, manifestDirectory string) []string {
+	resolved := append([]string{}, command...)
+	for index := 1; index < len(resolved); index++ {
+		argument := resolved[index]
+		if !isExplicitRelativePath(argument) {
+			continue
+		}
+		path := filepath.Join(manifestDirectory, argument)
+		if !filepath.IsAbs(path) {
+			absolute, err := filepath.Abs(path)
+			if err == nil {
+				path = absolute
+			}
+		}
+		resolved[index] = filepath.Clean(path)
+	}
+	return resolved
+}
+
+func isExplicitRelativePath(value string) bool {
+	return value == "." || value == ".." ||
+		strings.HasPrefix(value, "."+string(filepath.Separator)) ||
+		strings.HasPrefix(value, ".."+string(filepath.Separator))
 }
 
 // ResolveNamed returns one provider for a capability. An empty name disables it.
@@ -921,6 +1263,37 @@ func (p Provider) RenderDiff(
 		}
 	}
 	return strings.TrimSpace(string(output)), nil
+}
+
+// FileCommand renders a file-backed provider action for terminal handoff.
+func (p Provider) FileCommand(action, path string) (*exec.Cmd, error) {
+	if _, ok := p.Manifest.Actions[action]; !ok {
+		return nil, fmt.Errorf("provider %q does not advertise %s", p.Name, action)
+	}
+	plan, err := p.Manifest.Render(action, actionData{Path: path})
+	if err != nil {
+		return nil, fmt.Errorf("%s: %w", p.Name, err)
+	}
+	if len(plan.Argv) == 0 {
+		return nil, fmt.Errorf("provider %q rendered an empty command", p.Name)
+	}
+	command := exec.Command(plan.Argv[0], plan.Argv[1:]...)
+	command.Dir = filepath.Dir(path)
+	command.Env = mergeEnvironment(os.Environ(), plan.Env)
+	return command, nil
+}
+
+// RunFileAction invokes a file-backed provider action without terminal handoff.
+func (p Provider) RunFileAction(ctx context.Context, action, path string) error {
+	plan, err := p.Manifest.Render(action, actionData{Path: path})
+	if err != nil {
+		return fmt.Errorf("%s: %w", p.Name, err)
+	}
+	_, stderr, err := runPlan(ctx, plan, filepath.Dir(path))
+	if err != nil {
+		return fmt.Errorf("%s: %w", p.Name, providerCommandError(stderr, err))
+	}
+	return nil
 }
 
 func runPlan(ctx context.Context, plan sharedprovider.Plan, directory string) ([]byte, string, error) {

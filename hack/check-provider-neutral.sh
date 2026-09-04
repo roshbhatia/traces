@@ -3,8 +3,18 @@ set -euo pipefail
 
 repo_dir=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
 
-core_paths=("$repo_dir/main.go" "$repo_dir/internal" "$repo_dir/flake.nix")
-source_globs=(--glob '*.go' --glob '*.nix')
+core_paths=(
+  "$repo_dir/main.go"
+  "$repo_dir/internal"
+  "$repo_dir/schema"
+  "$repo_dir/flake.nix"
+)
+source_globs=(
+  --glob '*.cue'
+  --glob '*.go'
+  --glob '*.json'
+  --glob '*.nix'
+)
 
 # Discover provider names from extras. Git is part of the core vocabulary, so
 # its name is too broad to audit as a standalone word.

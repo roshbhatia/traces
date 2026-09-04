@@ -429,6 +429,32 @@ func TestEmptyBatchChangesNothing(t *testing.T) {
 	}
 }
 
+func TestHostActionsRequireConfiguredProviders(t *testing.T) {
+	m := foldable(t)
+	for i, row := range m.rows {
+		if row.raw() != "" {
+			m.cursor = i
+			break
+		}
+	}
+
+	yanked, cmd := m.yank()
+	if cmd != nil {
+		t.Fatal("yank without a provider returned a command")
+	}
+	if yanked.status != "no clipboard provider configured" {
+		t.Fatalf("yank status = %q", yanked.status)
+	}
+
+	opened, cmd := m.edit()
+	if cmd != nil {
+		t.Fatal("edit without a provider returned a command")
+	}
+	if opened.status != "no document provider configured" {
+		t.Fatalf("edit status = %q", opened.status)
+	}
+}
+
 func liveModelWithRows(b *testing.B, count int) Model {
 	b.Helper()
 	now := time.Now()

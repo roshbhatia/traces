@@ -16,6 +16,11 @@ type Diff struct {
 	Provider string `json:"provider,omitempty" yaml:"provider"`
 }
 
+// Integration selects a provider for an optional host-side action.
+type Integration struct {
+	Provider string `json:"provider,omitempty" yaml:"provider"`
+}
+
 // Providers configures external provider discovery.
 type Providers struct {
 	Directory string `json:"directory,omitempty" yaml:"directory"`
@@ -23,8 +28,10 @@ type Providers struct {
 
 // Settings is the public Traces YAML surface.
 type Settings struct {
+	Clipboard Integration         `json:"clipboard,omitempty" yaml:"clipboard"`
 	Color     string              `json:"color,omitempty" yaml:"color" jsonschema:"enum=auto,enum=always,enum=never"`
 	Diff      Diff                `json:"diff,omitempty" yaml:"diff"`
+	Editor    Integration         `json:"editor,omitempty" yaml:"editor"`
 	Providers Providers           `json:"providers,omitempty" yaml:"providers"`
 	Sources   map[string][]string `json:"sources,omitempty" yaml:"sources"`
 }

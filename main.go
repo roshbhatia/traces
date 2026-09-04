@@ -31,6 +31,7 @@ import (
 	"github.com/roshbhatia/traces/internal/session"
 	"github.com/roshbhatia/traces/internal/source"
 	"github.com/roshbhatia/traces/internal/ui"
+	"golang.org/x/term"
 )
 
 func main() {
@@ -107,7 +108,19 @@ func main() {
 		fmt.Fprintf(os.Stderr, "traces: skipped diff provider: %v\n", err)
 	}
 	if diffProvider != nil {
-		diffProvider.Color = *color
+		diffProvider.Color = providerColor(*color)
+	}
+	clipboardProvider, err := source.ResolveNamed(
+		settings.Clipboard.Provider, source.ActionClipboardWrite, registry,
+	)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "traces: skipped clipboard provider: %v\n", err)
+	}
+	documentProvider, err := source.ResolveNamed(
+		settings.Editor.Provider, source.ActionDocumentOpen, registry,
+	)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "traces: skipped document provider: %v\n", err)
 	}
 	for _, one := range providers {
 		one.Session = which
@@ -129,12 +142,27 @@ func main() {
 	src := sources{
 		path: path, providers: providers, back: *back, every: *every, lag: *lag,
 		service: *service, diffProvider: diffProvider,
+		clipboardProvider: clipboardProvider, documentProvider: documentProvider,
 	}
 
 	if *asJSON || *list || *once {
 		os.Exit(src.report(which, scope, directory, *list, *asJSON))
 	}
 	os.Exit(src.watch(which, scope, directory))
+}
+
+var stdoutIsTerminal = func() bool {
+	return term.IsTerminal(int(os.Stdout.Fd()))
+}
+
+func providerColor(mode string) string {
+	if mode != "auto" {
+		return mode
+	}
+	if stdoutIsTerminal() {
+		return "always"
+	}
+	return "never"
 }
 
 func generateCompletion(args []string) {
@@ -164,7 +192,10 @@ func commandMetadata() completion.Command {
 			{Name: "list", Description: "List sessions"},
 			{Name: "once", Description: "Print one trace tree"},
 			{Name: "poll", Description: "Provider poll interval", Value: true},
-			{Name: "provider", Description: "Read named activity providers", Value: true},
+			{
+				Name: "provider", Description: "Read named activity providers", Value: true,
+				CompletionCommand: providerCompletionCommand(),
+			},
 			{Name: "service", Description: "Filter by service", Value: true},
 			{Name: "session", Description: "Attach by session ID or prefix", Value: true},
 			{Name: "since", Description: "Initial provider window", Value: true},
@@ -180,28 +211,45 @@ func commandMetadata() completion.Command {
 			Description: "Inspect and validate external providers",
 			Subcommands: []completion.Command{
 				{
-					Name:        "list",
-					Description: "List discovered providers",
-					Flags:       providerCommandFlags(),
+					Name:              "list",
+					Description:       "List discovered providers",
+					Flags:             providerCommandFlags(true),
+					CompletionCommand: providerCompletionCommand(),
 				},
 				{
-					Name:        "validate",
-					Description: "Validate provider commands and protocol output",
-					Flags:       providerCommandFlags(),
+					Name:              "validate",
+					Description:       "Validate provider commands and protocol output",
+					Flags:             providerCommandFlags(false),
+					CompletionCommand: providerCompletionCommand(),
 				},
 			},
 		}},
 	}
 }
 
-func providerCommandFlags() []completion.Flag {
-	return []completion.Flag{
+func providerCommandFlags(includeNames bool) []completion.Flag {
+	flags := []completion.Flag{
 		{Name: "config", Description: "YAML configuration file", Value: true},
 		{Name: "json", Description: "Print JSON"},
 	}
+	if includeNames {
+		flags = append(flags, completion.Flag{Name: "names", Description: "Print provider names, one per line"})
+	}
+	return flags
+}
+
+func providerCompletionCommand() []string {
+	return []string{"traces", "provider", "complete", completion.ContextPlaceholder}
 }
 
 func runProvider(args []string) {
+	if len(args) > 0 && args[0] == "complete" {
+		if len(args) != 2 {
+			return
+		}
+		runProviderCompletion(args[1])
+		return
+	}
 	if len(args) == 0 || (args[0] != "list" && args[0] != "validate") {
 		fmt.Fprintln(os.Stderr, "traces: provider requires list or validate")
 		os.Exit(1)
@@ -210,11 +258,20 @@ func runProvider(args []string) {
 	flags := flag.NewFlagSet("traces provider "+action, flag.ContinueOnError)
 	configPath := flags.String("config", "", "YAML configuration file")
 	asJSON := flags.Bool("json", false, "print JSON")
-	if err := flags.Parse(args[1:]); err != nil {
+	namesOnly := false
+	if action == "list" {
+		flags.BoolVar(&namesOnly, "names", false, "print provider names, one per line")
+	}
+	flagArgs, selected, err := providerArguments(args[1:])
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "traces: %v\n", err)
 		os.Exit(1)
 	}
-	if flags.NArg() > 1 {
-		fmt.Fprintf(os.Stderr, "traces: provider %s accepts at most one provider name\n", action)
+	if err := flags.Parse(flagArgs); err != nil {
+		os.Exit(1)
+	}
+	if namesOnly && *asJSON {
+		fmt.Fprintln(os.Stderr, "traces: --names requires provider list without --json")
 		os.Exit(1)
 	}
 	settings, err := source.LoadSettings(*configPath)
@@ -222,14 +279,16 @@ func runProvider(args []string) {
 		fmt.Fprintf(os.Stderr, "traces: %v\n", err)
 		os.Exit(1)
 	}
-	registry, err := source.Discover(settings)
+	registry, discoveryIssues, err := source.DiscoverChecked(settings)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "traces: %v\n", err)
 		os.Exit(1)
 	}
+	for _, issue := range discoveryIssues {
+		fmt.Fprintf(os.Stderr, "traces: invalid provider manifest: %v\n", issue)
+	}
 	names := registry.Names()
-	if flags.NArg() == 1 {
-		selected := flags.Arg(0)
+	if selected != "" {
 		if _, ok := registry[selected]; !ok {
 			fmt.Fprintf(os.Stderr, "traces: unknown provider %q\n", selected)
 			os.Exit(1)
@@ -237,13 +296,22 @@ func runProvider(args []string) {
 		names = []string{selected}
 	}
 	if action == "list" {
+		if namesOnly {
+			for _, name := range names {
+				fmt.Println(name)
+			}
+			exitForDiscoveryIssues(discoveryIssues)
+			return
+		}
 		if *asJSON {
 			data, _ := json.Marshal(registry)
 			fmt.Println(string(data))
+			exitForDiscoveryIssues(discoveryIssues)
 			return
 		}
 		if len(names) == 0 {
 			fmt.Println("No providers were discovered.")
+			exitForDiscoveryIssues(discoveryIssues)
 			return
 		}
 		for _, name := range names {
@@ -268,6 +336,7 @@ func runProvider(args []string) {
 			}
 			fmt.Print(output)
 		}
+		exitForDiscoveryIssues(discoveryIssues)
 		return
 	}
 	directory, _ := os.Getwd()
@@ -277,10 +346,11 @@ func runProvider(args []string) {
 		} else {
 			fmt.Println("No providers were discovered.")
 		}
+		exitForDiscoveryIssues(discoveryIssues)
 		return
 	}
 	results := make([]source.Validation, 0, len(names))
-	failed := false
+	failed := len(discoveryIssues) > 0
 	for _, name := range names {
 		result := source.Validate(context.Background(), name, registry[name], directory)
 		results = append(results, result)
@@ -308,6 +378,84 @@ func runProvider(args []string) {
 	if failed {
 		os.Exit(1)
 	}
+}
+
+func runProviderCompletion(context string) {
+	settings, err := source.LoadSettings("")
+	if err != nil {
+		return
+	}
+	registry, _, err := source.DiscoverChecked(settings)
+	if err != nil {
+		return
+	}
+	for _, candidate := range providerCompletionCandidates(context, registry.Names()) {
+		fmt.Println(candidate)
+	}
+}
+
+func providerCompletionCandidates(context string, names []string) []string {
+	value := completionValue(context)
+	comma := strings.LastIndex(value, ",")
+	prefix := ""
+	current := value
+	selected := map[string]bool{}
+	if comma >= 0 {
+		prefix = value[:comma+1]
+		current = value[comma+1:]
+		for _, name := range strings.Split(strings.TrimSuffix(prefix, ","), ",") {
+			selected[name] = true
+		}
+	}
+	candidates := make([]string, 0, len(names))
+	for _, name := range names {
+		if !selected[name] && strings.HasPrefix(name, current) {
+			candidates = append(candidates, prefix+name)
+		}
+	}
+	return candidates
+}
+
+func completionValue(context string) string {
+	if context == "" || strings.ContainsAny(context[len(context)-1:], " \t\r\n") {
+		return ""
+	}
+	start := strings.LastIndexAny(context, " \t\r\n") + 1
+	value := context[start:]
+	if _, after, found := strings.Cut(value, "="); found {
+		return after
+	}
+	return value
+}
+
+func exitForDiscoveryIssues(issues []error) {
+	if len(issues) > 0 {
+		os.Exit(1)
+	}
+}
+
+func providerArguments(args []string) ([]string, string, error) {
+	flags := make([]string, 0, len(args))
+	name := ""
+	for index := 0; index < len(args); index++ {
+		argument := args[index]
+		if strings.HasPrefix(argument, "-") {
+			flags = append(flags, argument)
+			if argument == "-config" || argument == "--config" {
+				index++
+				if index >= len(args) {
+					return nil, "", fmt.Errorf("%s requires a value", argument)
+				}
+				flags = append(flags, args[index])
+			}
+			continue
+		}
+		if name != "" {
+			return nil, "", fmt.Errorf("provider command accepts at most one provider name")
+		}
+		name = argument
+	}
+	return flags, name, nil
 }
 
 type providerListView struct {
@@ -369,6 +517,20 @@ func runGenerate(args []string) {
 		"schema/traces.schema.json":   schema,
 		"schema/provider.schema.json": providerSchema,
 	}
+	completionPaths := map[string]string{
+		"bash": "completions/traces.bash",
+		"fish": "completions/traces.fish",
+		"nu":   "completions/traces.nu",
+		"zsh":  "completions/_traces",
+	}
+	for shell, path := range completionPaths {
+		generated, err := completion.Generate(shell, commandMetadata())
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "traces: generate %s completion: %v\n", shell, err)
+			os.Exit(1)
+		}
+		outputs[path] = []byte(generated)
+	}
 	for path, data := range outputs {
 		if *check {
 			current, readErr := os.ReadFile(path)
@@ -422,13 +584,15 @@ func attached(pinned string, all bool, registry source.Registry, directory strin
 
 // sources is every place this machine keeps spans.
 type sources struct {
-	path         string
-	providers    []*source.Provider
-	back         time.Duration
-	every        time.Duration
-	lag          time.Duration
-	service      string
-	diffProvider *source.Provider
+	path              string
+	providers         []*source.Provider
+	back              time.Duration
+	every             time.Duration
+	lag               time.Duration
+	service           string
+	diffProvider      *source.Provider
+	clipboardProvider *source.Provider
+	documentProvider  *source.Provider
 }
 
 // name says what the frame is reading, so an empty view names the source that
@@ -763,16 +927,27 @@ func (s sources) watch(which string, scope []string, directory string) int {
 		}
 	}()
 
-	return run(batches, stop, which, scope, directory, s.name(), s.diffProvider)
+	return run(batches, stop, which, scope, directory, s.name(), ui.Providers{
+		Clipboard: s.clipboardProvider,
+		Diff:      s.diffProvider,
+		Document:  s.documentProvider,
+	})
 }
 
 // run owns the program either way. Follow owns its own goroutine, so the spans
 // arrive as messages rather than as a blocking read inside Update.
-func run(batches chan otlp.Batch, stop chan struct{}, which string, scope []string, directory, from string, diffProvider *source.Provider) int {
+func run(
+	batches chan otlp.Batch,
+	stop chan struct{},
+	which string,
+	scope []string,
+	directory, from string,
+	providers ui.Providers,
+) int {
 	store := session.NewStore()
 	store.Scope(scope, directory)
 	program := tea.NewProgram(
-		ui.New(store, which, from, diffProvider),
+		ui.New(store, which, from, providers),
 		tea.WithAltScreen(),
 		tea.WithMouseCellMotion(),
 	)

@@ -1,0 +1,17 @@
+# yaml-language-server: $schema=../../schema/provider.schema.json
+version: provider/v1
+name: desktop
+description: Copy text and open documents through host desktop commands
+command: [traces-provider-desktop]
+defaults:
+  timeout: 30s
+actions:
+  provider.validate:
+    description: Check the host clipboard and document commands without side effects
+    argv: [--action, validate]
+  clipboard.write:
+    description: Copy the contents of a file to the host clipboard
+    argv: [--action, clipboard, --path, "{{ .Path }}"]
+  document.open:
+    description: Open a file with the configured editor or host application
+    argv: [--action, document, --path, "{{ .Path }}"]

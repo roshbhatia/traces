@@ -23,3 +23,33 @@ diffFixture: #Manifest & {
 		argv: ["{{ .Local }}", "{{ .Remote }}"]
 	}
 }
+
+allActionsFixture: #Manifest & {
+	version:     "provider/v1"
+	name:        "all-actions-fixture"
+	description: "fixture"
+	command:     ["fixture"]
+	actions: {
+		"activity.read": {
+			description: "read activity"
+		}
+		"clipboard.write": {
+			description: "write to the clipboard"
+		}
+		"diff.render": {
+			description: "render a diff"
+		}
+		"document.open": {
+			description: "open a document"
+		}
+		"provider.validate": {
+			description: "validate a provider"
+		}
+		"session.current": {
+			description: "read the current session"
+		}
+		"session.discover": {
+			description: "discover sessions"
+		}
+	}
+}

@@ -1,0 +1,126 @@
+#compdef traces
+__traces_completion_values_0() {
+  local -a values
+  values=( 'auto' 'always' 'never')
+  compadd -a values
+}
+__traces_completion_values_1() {
+  local -a values
+  values=()
+  values+=("${(@f)$('traces' 'provider' 'complete' "${BUFFER[1,CURSOR]}" 2>/dev/null)}")
+  compadd -a values
+}
+__traces_completion_values_2() {
+  local -a values
+  values=()
+  values+=("${(@f)$('traces' 'provider' 'complete' "${BUFFER[1,CURSOR]}" 2>/dev/null)}")
+  compadd -a values
+}
+__traces_completion_values_3() {
+  local -a values
+  values=()
+  values+=("${(@f)$('traces' 'provider' 'complete' "${BUFFER[1,CURSOR]}" 2>/dev/null)}")
+  compadd -a values
+}
+
+_traces() {
+  local context=''
+  local word
+  local consume_value=0
+  local options_done=0
+  for word in ${words[2,$((CURRENT - 1))]}; do
+    if (( consume_value )); then
+      consume_value=0
+      continue
+    fi
+    if (( options_done )); then
+      continue
+    fi
+    if [[ "$word" == '--' ]]; then
+      options_done=1
+      continue
+    fi
+    case "$context:$word" in
+      ':--color') consume_value=1; continue ;;
+      ':--color='*) continue ;;
+      ':--config') consume_value=1; continue ;;
+      ':--config='*) continue ;;
+      ':--file') consume_value=1; continue ;;
+      ':--file='*) continue ;;
+      ':--lag') consume_value=1; continue ;;
+      ':--lag='*) continue ;;
+      ':--poll') consume_value=1; continue ;;
+      ':--poll='*) continue ;;
+      ':--provider') consume_value=1; continue ;;
+      ':--provider='*) continue ;;
+      ':--service') consume_value=1; continue ;;
+      ':--service='*) continue ;;
+      ':--session') consume_value=1; continue ;;
+      ':--session='*) continue ;;
+      ':--since') consume_value=1; continue ;;
+      ':--since='*) continue ;;
+      'provider list:--config') consume_value=1; continue ;;
+      'provider list:--config='*) continue ;;
+      'provider validate:--config') consume_value=1; continue ;;
+      'provider validate:--config='*) continue ;;
+    esac
+    case "$context:$word" in
+      ':completion') context='completion' ;;
+      ':generate') context='generate' ;;
+      ':provider') context='provider' ;;
+      'provider:list') context='provider list' ;;
+      'provider:validate') context='provider validate' ;;
+    esac
+  done
+  case "$context" in
+    '')
+      _arguments \
+        '--all[Show every local run]' \
+        '--color[Color output]:value:__traces_completion_values_0' \
+        '--config[YAML configuration file]:value:' \
+        '--file[Read an OTLP JSON file]:value:' \
+        '--json[Print newline-delimited JSON]' \
+        '--lag[Provider overlap window]:value:' \
+        '--list[List sessions]' \
+        '--once[Print one trace tree]' \
+        '--poll[Provider poll interval]:value:' \
+        '--provider[Read named activity providers]:value:__traces_completion_values_1' \
+        '--service[Filter by service]:value:' \
+        '--session[Attach by session ID or prefix]:value:' \
+        '--since[Initial provider window]:value:' \
+        '1:command:(completion generate provider)'
+
+      ;;
+    'completion')
+      _arguments \
+        '2:shell:(bash zsh fish nu)'
+      ;;
+    'generate')
+      _arguments \
+        '--check[Fail when generated files are stale]' \
+        '*:argument:'
+
+      ;;
+    'provider')
+      _arguments \
+        '2:command:(list validate)'
+
+      ;;
+    'provider list')
+      _arguments \
+        '--config[YAML configuration file]:value:' \
+        '--json[Print JSON]' \
+        '--names[Print provider names, one per line]' \
+        '*:argument:__traces_completion_values_2'
+
+      ;;
+    'provider validate')
+      _arguments \
+        '--config[YAML configuration file]:value:' \
+        '--json[Print JSON]' \
+        '*:argument:__traces_completion_values_3'
+
+      ;;
+  esac
+}
+compdef _traces traces

@@ -79,8 +79,8 @@ github.com/rivo/uniseg v0.1.0/go.mod h1:J6wj4VEh+S6ZtnVlnTBMWIodfgj8LQOQFoIToxlJ
 github.com/rivo/uniseg v0.2.0/go.mod h1:J6wj4VEh+S6ZtnVlnTBMWIodfgj8LQOQFoIToxlJtxc=
 github.com/rivo/uniseg v0.4.7 h1:WUdvkW8uEhrYfLC4ZzdpI2ztxP1I582+49Oc5Mq64VQ=
 github.com/rivo/uniseg v0.4.7/go.mod h1:FN3SvrM+Zdj16jyLfmOkMNblXMcoc8DfTHruCPUcx88=
-github.com/roshbhatia/go-utils v0.9.1 h1:AGum6z7EtNJMY4xV1n83IYlKprczON2OIZSmUb7+NOg=
-github.com/roshbhatia/go-utils v0.9.1/go.mod h1:5K07tqIQNYXtdClY0GygGteATBp0Mf/0q8hf51KsT9w=
+github.com/roshbhatia/go-utils v0.9.11 h1:yFZOnAHBny8uL8N/QQZOcssBg4c0TTaKq1g++2ODZ3Y=
+github.com/roshbhatia/go-utils v0.9.11/go.mod h1:5K07tqIQNYXtdClY0GygGteATBp0Mf/0q8hf51KsT9w=
 github.com/stretchr/testify v1.11.1 h1:7s2iGBzp5EwR7/aIZr8ao5+dra3wiQyKjjFuvgVKu7U=
 github.com/stretchr/testify v1.11.1/go.mod h1:wZwfW3scLgRK+23gO65QZefKpKQRnfz6sD981Nm4B6U=
 github.com/xo/terminfo v0.0.0-20220910002029-abceb7e1c41e h1:JVG44RsyaB9T2KIHavMF/ppJZNG9ZpyihvCd0w101no=

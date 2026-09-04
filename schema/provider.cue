@@ -1,6 +1,12 @@
 package provider
 
-#ActionName: "activity.read" | "session.current" | "session.discover" | "diff.render"
+#ActionName: "activity.read" |
+	"clipboard.write" |
+	"diff.render" |
+	"document.open" |
+	"provider.validate" |
+	"session.current" |
+	"session.discover"
 
 #Action: close({
 	description: string & !=""
@@ -13,7 +19,7 @@ package provider
 	name: string & =~"^[a-z][a-z0-9._-]*$"
 	description: string & !=""
 	command: [string & !="", ...string]
-	actions: [#ActionName]: #Action
+	actions: close({[#ActionName]: #Action})
 	requires?: close({
 		commands?: [...string & !=""]
 		environment?: [...string & =~"^[A-Za-z_][A-Za-z0-9_]*$"]

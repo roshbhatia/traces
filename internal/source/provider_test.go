@@ -4,9 +4,11 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 	"text/template"
@@ -57,7 +59,7 @@ func TestCoreDefaultsHaveNoHarnessProviders(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if settings.Diff.Provider != "" || len(settings.Sources) != 0 {
+	if settings.Clipboard.Provider != "" || settings.Diff.Provider != "" || settings.Editor.Provider != "" || len(settings.Sources) != 0 {
 		t.Fatalf("defaults include integrations: %+v", settings)
 	}
 }
@@ -150,6 +152,64 @@ func TestDiscoverUsesConfiguredDirectoryBeforeEnvironment(t *testing.T) {
 	}
 	if _, ok := registry["extra"]; !ok {
 		t.Fatal("environment provider was not discovered")
+	}
+}
+
+func TestInvalidHigherPrecedenceProviderReservesItsLogicalName(t *testing.T) {
+	configured := t.TempDir()
+	environment := t.TempDir()
+	if err := os.WriteFile(filepath.Join(configured, "shared.yaml"), []byte("version: ["), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	writeManifest(t, environment, "shared.yaml", "shared", "lower priority provider")
+	writeManifest(t, environment, "unrelated.yaml", "unrelated", "unrelated provider")
+	t.Setenv("TRACES_PROVIDER_PATH", environment)
+	t.Setenv("XDG_DATA_HOME", t.TempDir())
+	t.Setenv("XDG_DATA_DIRS", t.TempDir())
+
+	settings := Default()
+	settings.Providers.Directory = configured
+	registry, issues, err := DiscoverChecked(settings)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, exists := registry["shared"]; exists {
+		t.Fatalf("invalid higher-precedence provider fell back to lower manifest: %+v", registry["shared"])
+	}
+	if got := registry["unrelated"].Manifest.Description; got != "unrelated provider" {
+		t.Fatalf("unrelated provider description = %q", got)
+	}
+	if len(issues) != 1 || !strings.Contains(issues[0].Error(), "shared.yaml") {
+		t.Fatalf("issues = %v", issues)
+	}
+}
+
+func TestInvalidStandardLayoutProviderReservesDirectoryName(t *testing.T) {
+	configured := t.TempDir()
+	providerDirectory := filepath.Join(configured, "shared")
+	if err := os.Mkdir(providerDirectory, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(providerDirectory, "provider.yaml"), []byte("version: ["), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	environment := t.TempDir()
+	writeManifest(t, environment, "shared.yaml", "shared", "lower priority provider")
+	t.Setenv("TRACES_PROVIDER_PATH", environment)
+	t.Setenv("XDG_DATA_HOME", t.TempDir())
+	t.Setenv("XDG_DATA_DIRS", t.TempDir())
+
+	settings := Default()
+	settings.Providers.Directory = configured
+	registry, issues, err := DiscoverChecked(settings)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, exists := registry["shared"]; exists {
+		t.Fatalf("invalid standard-layout provider fell back to lower manifest: %+v", registry["shared"])
+	}
+	if len(issues) != 1 || !strings.Contains(issues[0].Error(), "shared/provider.yaml") {
+		t.Fatalf("issues = %v", issues)
 	}
 }
 
@@ -270,6 +330,15 @@ func TestValidateExecutesEveryStandardActionInAnIsolatedEnvironment(t *testing.T
 		ActionSessionDiscover,
 	)
 	manifest.Requires.Environment = []string{"PROVIDER_TEST_SESSION"}
+	manifest.Actions[ActionProviderValidate] = sharedprovider.Action{
+		Description: "validate provider runtime",
+		Argv: []string{`test "${PROVIDER_TEST_SESSION:-}" = "live-session"
+test -z "${PROVIDER_TEST_UNDECLARED:-}"
+printf 'provider.validate\n' >> "$MARKER"
+printf '%s\n' '{"checks":[{"kind":"environment","name":"PROVIDER_TEST_SESSION","status":"ok"}]}'
+`},
+		Env: map[string]string{"MARKER": marker},
+	}
 	manifest.Actions[ActionActivityRead] = sharedprovider.Action{
 		Description: "read activity",
 		Argv: []string{`printf 'activity.read\n' >> "$MARKER"
@@ -311,7 +380,8 @@ printf 'session-one\nsession-two\n'
 	if err != nil {
 		t.Fatal(err)
 	}
-	want := `activity.read
+	want := `provider.validate
+activity.read
 diff.render
 session.current
 session.discover
@@ -518,7 +588,7 @@ func TestValidateRejectsUnsupportedAction(t *testing.T) {
 	}
 }
 
-func TestDiscoverRejectsUnsupportedAction(t *testing.T) {
+func TestDiscoverIsolatesUnsupportedAction(t *testing.T) {
 	directory := t.TempDir()
 	manifest := `version: provider/v1
 name: unsupported
@@ -531,8 +601,344 @@ actions:
 	if err := os.WriteFile(filepath.Join(directory, "provider.yaml"), []byte(manifest), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := discoverDirectory(directory); err == nil || !strings.Contains(err.Error(), "unsupported action") {
-		t.Fatalf("discover error = %v", err)
+	loaded, issues, err := discoverDirectory(directory)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(loaded) != 0 || len(issues) != 1 || !strings.Contains(issues[0].Error(), "unsupported action") {
+		t.Fatalf("loaded = %+v, issues = %v", loaded, issues)
+	}
+}
+
+func TestDiscoverIsolatesMalformedManifestFromValidSibling(t *testing.T) {
+	directory := t.TempDir()
+	writeManifest(t, directory, "valid.yaml", "valid", "Valid provider")
+	if err := os.WriteFile(filepath.Join(directory, "broken.yaml"), []byte("version: ["), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	loaded, issues, err := discoverDirectory(directory)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(loaded) != 1 || loaded[0].Manifest.Name != "valid" {
+		t.Fatalf("loaded = %+v", loaded)
+	}
+	if len(issues) != 1 || !strings.Contains(issues[0].Error(), "broken.yaml") {
+		t.Fatalf("issues = %v", issues)
+	}
+}
+
+func TestDiscoverFollowsSymlinkedProviderDirectory(t *testing.T) {
+	root := t.TempDir()
+	target := t.TempDir()
+	writeManifest(t, target, "provider.yaml", "linked", "Linked provider")
+	if err := os.Symlink(target, filepath.Join(root, "linked")); err != nil {
+		t.Fatal(err)
+	}
+	loaded, issues, err := discoverDirectory(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(loaded) != 1 || loaded[0].Manifest.Name != "linked" {
+		t.Fatalf("loaded = %+v", loaded)
+	}
+	if len(issues) != 0 {
+		t.Fatalf("issues = %v", issues)
+	}
+}
+
+func TestDiscoverReportsBrokenProviderDirectorySymlink(t *testing.T) {
+	root := t.TempDir()
+	broken := filepath.Join(root, "broken")
+	if err := os.Symlink(filepath.Join(root, "missing"), broken); err != nil {
+		t.Fatal(err)
+	}
+	loaded, issues, err := discoverDirectory(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(loaded) != 0 {
+		t.Fatalf("loaded = %+v", loaded)
+	}
+	if len(issues) != 1 || !strings.Contains(issues[0].Error(), "resolve provider directory symlink") {
+		t.Fatalf("issues = %v", issues)
+	}
+}
+
+func TestDiscoverCheckedReturnsMalformedManifestIssues(t *testing.T) {
+	directory := t.TempDir()
+	if err := os.WriteFile(filepath.Join(directory, "broken.yaml"), []byte("version: ["), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	settings := Default()
+	settings.Providers.Directory = directory
+	t.Setenv("TRACES_PROVIDER_PATH", "")
+	t.Setenv("XDG_DATA_HOME", t.TempDir())
+	t.Setenv("XDG_DATA_DIRS", t.TempDir())
+	registry, issues, err := DiscoverChecked(settings)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(registry) != 0 || len(issues) != 1 || !strings.Contains(issues[0].Error(), "broken.yaml") {
+		t.Fatalf("registry = %+v, issues = %v", registry, issues)
+	}
+}
+
+func TestDiscoverCheckedAggregatesDirectoryAndManifestIssues(t *testing.T) {
+	root := t.TempDir()
+	notDirectory := filepath.Join(root, "not-a-directory")
+	if err := os.WriteFile(notDirectory, []byte("file"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	providers := filepath.Join(root, "providers")
+	if err := os.MkdirAll(providers, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(providers, "broken.yaml"), []byte("version: ["), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	valid := `version: provider/v1
+name: valid
+description: Valid test provider
+command: [/usr/bin/true]
+actions:
+  session.current:
+    description: Read current session
+`
+	if err := os.WriteFile(filepath.Join(providers, "valid.yaml"), []byte(valid), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	settings := Default()
+	settings.Providers.Directory = notDirectory
+	t.Setenv("TRACES_PROVIDER_PATH", providers)
+	t.Setenv("XDG_DATA_HOME", t.TempDir())
+	t.Setenv("XDG_DATA_DIRS", t.TempDir())
+	registry, issues, err := DiscoverChecked(settings)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(registry) != 1 || registry["valid"].Manifest.Name != "valid" {
+		t.Fatalf("registry = %+v, issues = %v", registry, issues)
+	}
+	if len(issues) != 2 {
+		t.Fatalf("issues = %v", issues)
+	}
+	if !strings.Contains(issues[0].Error(), "not-a-directory") || !strings.Contains(issues[1].Error(), "broken.yaml") {
+		t.Fatalf("issues = %v", issues)
+	}
+}
+
+func TestRelativeProviderCommandUsesManifestDirectory(t *testing.T) {
+	providerDirectory := t.TempDir()
+	workspace := t.TempDir()
+	shell, err := exec.LookPath("sh")
+	if err != nil {
+		t.Fatal(err)
+	}
+	script := filepath.Join(providerDirectory, "provider.sh")
+	if err := os.WriteFile(script, []byte(`#!/bin/sh
+printf '%s\n' '{"traceId":"demo","spanId":"root","name":"validation","startUnixNano":"1","endUnixNano":"2"}'
+`), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	manifest := testManifest("relative", []string{shell, "./provider.sh"}, ActionActivityRead)
+	loaded := sharedprovider.LoadedManifest{
+		Manifest: manifest,
+		Path:     filepath.Join(providerDirectory, "provider.yaml"),
+	}
+	settings := Default()
+	settings.Sources["runner"] = []string{"relative"}
+	providers, err := ResolveRegistry("", "runner", settings, Registry{"relative": loaded})
+	if err != nil {
+		t.Fatal(err)
+	}
+	providers[0].Directory = workspace
+	batch, err := providers[0].Fetch(context.Background(), time.Second)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(batch.Spans) != 1 || batch.Spans[0].Name != "validation" {
+		t.Fatalf("batch = %+v", batch)
+	}
+	validation := Validate(context.Background(), "relative", loaded, workspace)
+	if validation.Status != "ok" {
+		t.Fatalf("validation = %+v", validation)
+	}
+}
+
+func TestStaticProviderArgumentsUseManifestDirectory(t *testing.T) {
+	directory := filepath.Join(t.TempDir(), "provider")
+	tests := []struct {
+		name    string
+		command []string
+		want    []string
+	}{
+		{
+			name:    "python script",
+			command: []string{"python3", "./provider.py"},
+			want:    []string{"python3", filepath.Join(directory, "provider.py")},
+		},
+		{
+			name:    "go runner",
+			command: []string{"go", "run", "./main.go"},
+			want:    []string{"go", "run", filepath.Join(directory, "main.go")},
+		},
+		{
+			name:    "shell script",
+			command: []string{"sh", "./provider.sh"},
+			want:    []string{"sh", filepath.Join(directory, "provider.sh")},
+		},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			got := resolveProviderArguments(test.command, directory)
+			if strings.Join(got, "\x00") != strings.Join(test.want, "\x00") {
+				t.Fatalf("resolved command = %q, want %q", got, test.want)
+			}
+		})
+	}
+}
+
+func TestValidateUsesProviderOwnedRequirementChecks(t *testing.T) {
+	shell, err := exec.LookPath("sh")
+	if err != nil {
+		t.Fatal(err)
+	}
+	manifest := testManifest("wrapped", []string{shell, "-c"}, ActionProviderValidate, ActionSessionCurrent)
+	manifest.Requires.Commands = []string{"dependency-inside-provider-wrapper"}
+	manifest.Actions[ActionProviderValidate] = sharedprovider.Action{
+		Description: "validate provider runtime",
+		Argv:        []string{`printf '%s\n' '{"checks":[{"kind":"command","name":"dependency-inside-provider-wrapper","status":"ok"}]}'`},
+	}
+	manifest.Actions[ActionSessionCurrent] = sharedprovider.Action{
+		Description: "read current session",
+		Argv:        []string{"exit 0"},
+	}
+	result := Validate(context.Background(), "wrapped", sharedprovider.LoadedManifest{Manifest: manifest}, t.TempDir())
+	if result.Status != "ok" {
+		t.Fatalf("validation = %+v", result)
+	}
+	if !slices.ContainsFunc(result.Checks, func(check ValidationCheck) bool {
+		return check.Name == "probe:"+ActionProviderValidate && check.Status == "ok"
+	}) {
+		t.Fatalf("validation omitted provider-owned dependency check: %+v", result)
+	}
+}
+
+func TestValidateRejectsOmittedProviderOwnedRequirement(t *testing.T) {
+	shell, err := exec.LookPath("sh")
+	if err != nil {
+		t.Fatal(err)
+	}
+	manifest := testManifest("incomplete", []string{shell, "-c"}, ActionProviderValidate)
+	manifest.Requires.Commands = []string{"required-command"}
+	manifest.Actions[ActionProviderValidate] = sharedprovider.Action{
+		Description: "validate provider runtime",
+		Argv:        []string{`printf '%s\n' '{"checks":[{"kind":"command","name":"another-command","status":"ok"}]}'`},
+	}
+	result := Validate(context.Background(), "incomplete", sharedprovider.LoadedManifest{Manifest: manifest}, t.TempDir())
+	if result.Status != "failed" || !strings.Contains(result.Checks[len(result.Checks)-1].Message, "omitted") {
+		t.Fatalf("validation = %+v", result)
+	}
+}
+
+func TestValidateDoesNotPerformSideEffectActions(t *testing.T) {
+	shell, err := exec.LookPath("sh")
+	if err != nil {
+		t.Fatal(err)
+	}
+	marker := filepath.Join(t.TempDir(), "side-effect")
+	manifest := testManifest("host-actions", []string{shell, "-c"}, ActionClipboardWrite, ActionProviderValidate)
+	manifest.Actions[ActionClipboardWrite] = sharedprovider.Action{
+		Description: "copy text",
+		Argv:        []string{`touch "$MARKER"`},
+		Env:         map[string]string{"MARKER": marker},
+	}
+	manifest.Actions[ActionProviderValidate] = sharedprovider.Action{
+		Description: "validate provider runtime",
+		Argv:        []string{`printf '%s\n' '{"checks":[{"kind":"capability","name":"clipboard.write","status":"ok"}]}'`},
+	}
+	result := Validate(context.Background(), "host-actions", sharedprovider.LoadedManifest{Manifest: manifest}, t.TempDir())
+	if result.Status != "ok" {
+		t.Fatalf("validation = %+v", result)
+	}
+	if _, err := os.Stat(marker); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("validation performed clipboard side effect: %v", err)
+	}
+}
+
+func TestValidateRejectsOmittedSideEffectCapability(t *testing.T) {
+	shell, err := exec.LookPath("sh")
+	if err != nil {
+		t.Fatal(err)
+	}
+	manifest := testManifest("host-actions", []string{shell, "-c"}, ActionClipboardWrite, ActionProviderValidate)
+	manifest.Actions[ActionClipboardWrite] = sharedprovider.Action{
+		Description: "copy text",
+		Argv:        []string{"exit 0"},
+	}
+	manifest.Actions[ActionProviderValidate] = sharedprovider.Action{
+		Description: "validate provider runtime",
+		Argv:        []string{`printf '%s\n' '{"checks":[{"kind":"capability","name":"document.open","status":"ok"}]}'`},
+	}
+	result := Validate(context.Background(), "host-actions", sharedprovider.LoadedManifest{Manifest: manifest}, t.TempDir())
+	if result.Status != "failed" || !strings.Contains(result.Checks[len(result.Checks)-1].Message, "clipboard.write") {
+		t.Fatalf("validation = %+v", result)
+	}
+}
+
+func TestRunFileActionPassesTheInputPath(t *testing.T) {
+	shell, err := exec.LookPath("sh")
+	if err != nil {
+		t.Fatal(err)
+	}
+	directory := t.TempDir()
+	input := filepath.Join(directory, "input.txt")
+	output := filepath.Join(directory, "output.txt")
+	if err := os.WriteFile(input, []byte("provider input\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	manifest := testManifest("host-actions", []string{shell, "-c"}, ActionClipboardWrite)
+	manifest.Actions[ActionClipboardWrite] = sharedprovider.Action{
+		Description: "copy text",
+		Argv:        []string{`cat "$INPUT" > "$OUTPUT"`},
+		Env:         map[string]string{"INPUT": "{{ .Path }}", "OUTPUT": output},
+	}
+	provider := Provider{Manifest: manifest, Name: "host-actions"}
+	if err := provider.RunFileAction(context.Background(), ActionClipboardWrite, input); err != nil {
+		t.Fatal(err)
+	}
+	data, err := os.ReadFile(output)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(data) != "provider input\n" {
+		t.Fatalf("provider output = %q", data)
+	}
+}
+
+func TestSessionCapabilitiesResolveRelativeProviderCommand(t *testing.T) {
+	providerDirectory := t.TempDir()
+	script := filepath.Join(providerDirectory, "sessions.sh")
+	if err := os.WriteFile(script, []byte("#!/bin/sh\nprintf 'session-id\\n'\n"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	manifest := testManifest(
+		"relative-sessions",
+		[]string{"./sessions.sh"},
+		ActionSessionCurrent,
+		ActionSessionDiscover,
+	)
+	registry := Registry{"relative-sessions": {
+		Manifest: manifest,
+		Path:     filepath.Join(providerDirectory, "provider.yaml"),
+	}}
+	workspace := t.TempDir()
+	if got := registry.CurrentSession(context.Background(), workspace); got != "session-id" {
+		t.Fatalf("current session = %q", got)
+	}
+	if got := registry.DiscoverSessions(context.Background(), workspace); strings.Join(got, ",") != "session-id" {
+		t.Fatalf("discovered sessions = %v", got)
 	}
 }
 

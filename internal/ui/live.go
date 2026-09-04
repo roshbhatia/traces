@@ -1,12 +1,12 @@
 package ui
 
 import (
+	"context"
 	_ "embed"
 	"encoding/json"
 	"fmt"
 	"hash/fnv"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"sort"
 	"strconv"
@@ -234,10 +234,12 @@ type Model struct {
 	tab  string
 	spin spinner.Model
 
-	pane  viewport.Model
-	md    *glamour.TermRenderer
-	mdW   int
-	diffs *diffRenderer
+	pane              viewport.Model
+	md                *glamour.TermRenderer
+	mdW               int
+	diffs             *diffRenderer
+	clipboardProvider *source.Provider
+	documentProvider  *source.Provider
 
 	paneKey     string
 	paneSelect  string
@@ -255,11 +257,18 @@ type Model struct {
 	batchNext   otlp.Batch
 }
 
+// Providers supplies optional external actions to the interactive view.
+type Providers struct {
+	Clipboard *source.Provider
+	Diff      *source.Provider
+	Document  *source.Provider
+}
+
 // The tab bar, the rule and the pinned strip cost three inner lines of the
 // inspector box on every frame.
 const paneChrome = 3
 
-func New(store *session.Store, pinned, sourceName string, diffProviders ...*source.Provider) Model {
+func New(store *session.Store, pinned, sourceName string, configured ...Providers) Model {
 	// lipgloss asks the terminal for its background on first render, and Bubble
 	// Tea v1 reads the reply as a burst of keys: a hex digit `d` in the answer
 	// paged the view and cleared follow before anyone touched the keyboard.
@@ -268,27 +277,29 @@ func New(store *session.Store, pinned, sourceName string, diffProviders ...*sour
 	lipgloss.SetColorProfile(termenv.ANSI)
 	lipgloss.SetHasDarkBackground(true)
 
-	var diffProvider *source.Provider
-	if len(diffProviders) > 0 {
-		diffProvider = diffProviders[0]
+	providers := Providers{}
+	if len(configured) > 0 {
+		providers = configured[0]
 	}
 	m := Model{
-		store:  store,
-		pinned: pinned,
-		source: sourceName,
-		marks:  map[string]bool{},
-		folded: map[string]bool{},
-		width:  0,
-		height: 0,
-		follow: true,
-		anchor: true,
-		place:  placeBottom,
-		last:   placeBottom,
-		split:  50,
-		pane:   viewport.New(52, 20),
-		spin:   spinner.New(spinner.WithSpinner(spinner.MiniDot), spinner.WithStyle(live)),
-		diffs:  newDiffRenderer(diffProvider),
-		now:    time.Now(),
+		store:             store,
+		pinned:            pinned,
+		source:            sourceName,
+		marks:             map[string]bool{},
+		folded:            map[string]bool{},
+		width:             0,
+		height:            0,
+		follow:            true,
+		anchor:            true,
+		place:             placeBottom,
+		last:              placeBottom,
+		split:             50,
+		pane:              viewport.New(52, 20),
+		spin:              spinner.New(spinner.WithSpinner(spinner.MiniDot), spinner.WithStyle(live)),
+		diffs:             newDiffRenderer(providers.Diff),
+		clipboardProvider: providers.Clipboard,
+		documentProvider:  providers.Document,
+		now:               time.Now(),
 	}
 	m.reload()
 	m.cursor = max(0, len(m.rows)-1)
@@ -1065,10 +1076,6 @@ func (m Model) nextMatch(dir int) {
 // yank reports the verbatim bytes behind the cursor row. glamour is always on
 // and has no toggle, so this is the only way to recover text it reflowed
 // or that the tree pane truncated.
-// yank puts the row's whole text on the system clipboard. It used to report a
-// byte count and copy nothing, so the one escape from a reflowed pane did not
-// work. The copier is a plain Cmd rather than ExecProcess: pbcopy needs no
-// terminal, and handing it one would blank the frame for the length of a pipe.
 func (m Model) yank() (Model, tea.Cmd) {
 	at := m.at(m.cursor)
 	if at < 0 {
@@ -1079,41 +1086,42 @@ func (m Model) yank() (Model, tea.Cmd) {
 		m.status = "nothing to yank on this row"
 		return m, nil
 	}
-	name, args := copier()
-	if name == "" {
-		m.status = "no clipboard command on this machine"
+	if m.clipboardProvider == nil {
+		m.status = "no clipboard provider configured"
 		return m, nil
 	}
-	m.status = fmt.Sprintf("yanked %s", count(len(src), "byte"))
+	file, err := os.CreateTemp("", "traces-clipboard-*.txt")
+	if err != nil {
+		m.status = "clipboard temp file: " + err.Error()
+		return m, nil
+	}
+	path := file.Name()
+	if _, err := file.WriteString(src); err != nil {
+		_ = file.Close()
+		_ = os.Remove(path)
+		m.status = "clipboard temp file: " + err.Error()
+		return m, nil
+	}
+	if err := file.Close(); err != nil {
+		_ = os.Remove(path)
+		m.status = "clipboard temp file: " + err.Error()
+		return m, nil
+	}
+	provider := *m.clipboardProvider
+	m.status = fmt.Sprintf("yanking %s", count(len(src), "byte"))
 	return m, func() tea.Msg {
-		cmd := exec.Command(name, args...)
-		cmd.Stdin = strings.NewReader(src)
-		if err := cmd.Run(); err != nil {
+		defer func() { _ = os.Remove(path) }()
+		ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+		defer cancel()
+		if err := provider.RunFileAction(ctx, source.ActionClipboardWrite, path); err != nil {
 			return statusMsg("clipboard: " + err.Error())
 		}
-		return nil
+		return statusMsg(fmt.Sprintf("yanked %s", count(len(src), "byte")))
 	}
 }
 
 type statusMsg string
 
-// The first command that exists wins. Wayland before X11, because a Wayland
-// session usually still carries xclip and it writes to a clipboard nothing on
-// that session reads.
-func copier() (string, []string) {
-	for _, try := range [][]string{
-		{"pbcopy"}, {"wl-copy"}, {"xclip", "-selection", "clipboard"}, {"xsel", "-ib"},
-	} {
-		if _, err := exec.LookPath(try[0]); err == nil {
-			return try[0], try[1:]
-		}
-	}
-	return "", nil
-}
-
-// edit hands the row's text to $EDITOR. A tool result runs to thousands of
-// bytes and the pane reflows it; this is the way out to a reader's own pager,
-// search and yank.
 func (m Model) edit() (Model, tea.Cmd) {
 	at := m.at(m.cursor)
 	if at < 0 {
@@ -1125,6 +1133,10 @@ func (m Model) edit() (Model, tea.Cmd) {
 		m.status = "nothing to open on this row"
 		return m, nil
 	}
+	if m.documentProvider == nil {
+		m.status = "no document provider configured"
+		return m, nil
+	}
 	f, err := os.CreateTemp("", "traces-*.md")
 	if err != nil {
 		m.status = "temp file: " + err.Error()
@@ -1132,23 +1144,27 @@ func (m Model) edit() (Model, tea.Cmd) {
 	}
 	if _, err := f.WriteString(src); err != nil {
 		_ = f.Close()
+		_ = os.Remove(f.Name())
 		m.status = "temp file: " + err.Error()
 		return m, nil
 	}
 	if err := f.Close(); err != nil {
+		_ = os.Remove(f.Name())
 		m.status = "temp file: " + err.Error()
 		return m, nil
 	}
-	editor := os.Getenv("EDITOR")
-	if editor == "" {
-		editor = "vi"
+	command, err := m.documentProvider.FileCommand(source.ActionDocumentOpen, f.Name())
+	if err != nil {
+		_ = os.Remove(f.Name())
+		m.status = "document: " + err.Error()
+		return m, nil
 	}
 	// The file is left behind on purpose. The editor may fork, and deleting it
 	// on return would empty a buffer the reader is still in.
 	m.status = "opened " + f.Name()
-	return m, tea.ExecProcess(exec.Command(editor, f.Name()), func(err error) tea.Msg {
+	return m, tea.ExecProcess(command, func(err error) tea.Msg {
 		if err != nil {
-			return statusMsg("editor: " + err.Error())
+			return statusMsg("document: " + err.Error())
 		}
 		return statusMsg("closed " + filepath.Base(f.Name()))
 	})
