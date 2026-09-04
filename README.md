@@ -98,6 +98,8 @@ The core uses the native name as a fallback and contains no per-provider map.
 The `diff.render` action receives `.Local`, `.Remote`, `.Merged`, `.Width`, and
 `.Color` template data. Without a diff provider, Traces uses its built-in
 renderer. Rendered diffs are cached by provider manifest, width, and patch.
+The provider executable and interpreter scripts are part of the cache identity.
+Traces expires cached diffs after seven days and keeps at most 128 entries.
 
 `clipboard.write` and `document.open` receive `.Path`, which points to a
 temporary file. Traces performs no host action when its provider is absent.

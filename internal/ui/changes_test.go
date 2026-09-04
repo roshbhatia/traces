@@ -19,6 +19,7 @@ import (
 )
 
 func TestChangesTabRendersEditOutput(t *testing.T) {
+	t.Setenv("XDG_CACHE_HOME", t.TempDir())
 	patch := `## internal/file.go
 
 @@ -1 +1 @@
