@@ -36,7 +36,7 @@ nix profile install github:roshbhatia/traces#provider-git
 Install the provider-neutral core and its shell completions with Homebrew:
 
 ```bash
-brew install --cask roshbhatia/tap/traces
+brew install roshbhatia/tap/traces
 ```
 
 `go install github.com/roshbhatia/traces@latest` also installs only the core.
