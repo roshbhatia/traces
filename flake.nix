@@ -50,7 +50,7 @@
         let
           pkgs = nixpkgs.legacyPackages.${system};
           inherit (pkgs) lib;
-          version = "0.5.1";
+          version = "0.6.0";
           providerMeta = name: {
             description = "Composable agent trace provider: ${name}";
             homepage = "https://github.com/roshbhatia/traces";
