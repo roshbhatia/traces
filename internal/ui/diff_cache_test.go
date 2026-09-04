@@ -24,15 +24,25 @@ func TestDiffCacheInvalidatesChangedProviderFiles(t *testing.T) {
 	for _, test := range []struct {
 		name    string
 		command func(string) []string
+		argv    func(string) []string
 	}{
 		{name: "executable", command: func(script string) []string { return []string{script} }},
 		{name: "interpreter script", command: func(script string) []string { return []string{shell, script} }},
+		{
+			name:    "action interpreter script",
+			command: func(string) []string { return []string{shell} },
+			argv:    func(script string) []string { return []string{script} },
+		},
 	} {
 		t.Run(test.name, func(t *testing.T) {
-			t.Setenv("XDG_CACHE_HOME", t.TempDir())
+			isolateDiffCache(t)
 			script := filepath.Join(t.TempDir(), "provider.sh")
 			writeDiffProvider(t, script, "first")
-			provider := diffProvider("test", test.command(script), nil)
+			var argv []string
+			if test.argv != nil {
+				argv = test.argv(script)
+			}
+			provider := diffProvider("test", test.command(script), argv)
 			if got := newDiffRenderer(provider).render(cacheTestPatch, 80); got != "first" {
 				t.Fatalf("first render = %q", got)
 			}
@@ -45,8 +55,26 @@ func TestDiffCacheInvalidatesChangedProviderFiles(t *testing.T) {
 	}
 }
 
+func TestDiffMemoryCacheExpiresAndRemainsBounded(t *testing.T) {
+	isolateDiffCache(t)
+	renderer := newDiffRenderer()
+	renderer.cache["expired"] = diffCacheEntry{
+		output: "stale",
+		stored: time.Now().Add(-diffCacheTTL - time.Hour),
+	}
+	if output, ok := renderer.cached("expired", time.Now()); ok || output != "" {
+		t.Fatalf("expired memory entry = %q, %v", output, ok)
+	}
+	for index := 0; index < diffCacheMaxEntries+5; index++ {
+		renderer.remember(fmt.Sprintf("entry-%d", index), "cached")
+	}
+	if got := len(renderer.cache); got != diffCacheMaxEntries {
+		t.Fatalf("memory cache entries = %d, want %d", got, diffCacheMaxEntries)
+	}
+}
+
 func TestDiffCachePrunesExpiredAndExcessEntries(t *testing.T) {
-	t.Setenv("XDG_CACHE_HOME", t.TempDir())
+	isolateDiffCache(t)
 	directory := filepath.Dir(diffCachePath("current"))
 	if err := os.MkdirAll(directory, 0o755); err != nil {
 		t.Fatal(err)
@@ -85,7 +113,7 @@ func TestDiffCachePrunesExpiredAndExcessEntries(t *testing.T) {
 }
 
 func TestDiffCacheRejectsExpiredRead(t *testing.T) {
-	t.Setenv("XDG_CACHE_HOME", t.TempDir())
+	isolateDiffCache(t)
 	path := diffCachePath("expired")
 	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
 		t.Fatal(err)
@@ -97,12 +125,43 @@ func TestDiffCacheRejectsExpiredRead(t *testing.T) {
 	if err := os.Chtimes(path, old, old); err != nil {
 		t.Fatal(err)
 	}
-	if got := readDiffCache("expired"); got != "" {
+	if got, _ := readDiffCache("expired"); got != "" {
 		t.Fatalf("expired cache read = %q", got)
 	}
 	if _, err := os.Stat(path); !os.IsNotExist(err) {
 		t.Fatalf("expired cache entry remains: %v", err)
 	}
+}
+
+func TestDiffCacheKeepsDiskAgeInMemory(t *testing.T) {
+	isolateDiffCache(t)
+	path := diffCachePath("aging")
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(path, []byte("cached"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	stored := time.Now().Add(-6 * 24 * time.Hour)
+	if err := os.Chtimes(path, stored, stored); err != nil {
+		t.Fatal(err)
+	}
+	output, modified := readDiffCache("aging")
+	if output != "cached" {
+		t.Fatalf("disk cache read = %q", output)
+	}
+	renderer := newDiffRenderer()
+	renderer.rememberAt("aging", output, modified)
+	if output, ok := renderer.cached("aging", stored.Add(diffCacheTTL+time.Second)); ok || output != "" {
+		t.Fatalf("aged memory entry = %q, %v", output, ok)
+	}
+}
+
+func isolateDiffCache(t *testing.T) {
+	t.Helper()
+	root := t.TempDir()
+	t.Setenv("HOME", root)
+	t.Setenv("XDG_CACHE_HOME", filepath.Join(root, "cache"))
 }
 
 func writeDiffProvider(t *testing.T, path, output string) {

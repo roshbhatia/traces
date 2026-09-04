@@ -22,7 +22,12 @@ type diffRenderer struct {
 	provider *source.Provider
 	identity string
 	mu       sync.Mutex
-	cache    map[string]string
+	cache    map[string]diffCacheEntry
+}
+
+type diffCacheEntry struct {
+	output string
+	stored time.Time
 }
 
 const (
@@ -39,20 +44,17 @@ func newDiffRenderer(providers ...*source.Provider) *diffRenderer {
 	return &diffRenderer{
 		provider: selected,
 		identity: diffProviderIdentity(selected),
-		cache:    map[string]string{},
+		cache:    map[string]diffCacheEntry{},
 	}
 }
 
 func (renderer *diffRenderer) render(patch string, width int) string {
 	key := fmt.Sprintf("%x", sha256.Sum256([]byte(renderer.identity+"\x00"+strconv.Itoa(width)+"\x00"+patch)))
-	renderer.mu.Lock()
-	if cached, ok := renderer.cache[key]; ok {
-		renderer.mu.Unlock()
+	if cached, ok := renderer.cached(key, time.Now()); ok {
 		return cached
 	}
-	renderer.mu.Unlock()
-	if cached := readDiffCache(key); cached != "" {
-		renderer.remember(key, cached)
+	if cached, stored := readDiffCache(key); cached != "" {
+		renderer.rememberAt(key, cached, stored)
 		return cached
 	}
 
@@ -72,7 +74,11 @@ func diffProviderIdentity(provider *source.Provider) string {
 	if provider == nil {
 		return fmt.Sprintf("%x", hash.Sum(nil))
 	}
-	for _, argument := range provider.Manifest.Command {
+	arguments := append([]string{}, provider.Manifest.Command...)
+	if action, ok := provider.Manifest.Actions[source.ActionDiffRender]; ok {
+		arguments = append(arguments, action.Argv...)
+	}
+	for _, argument := range arguments {
 		info, err := os.Stat(argument)
 		if err != nil || !info.Mode().IsRegular() {
 			continue
@@ -95,10 +101,39 @@ func diffProviderIdentity(provider *source.Provider) string {
 	return fmt.Sprintf("%x", hash.Sum(nil))
 }
 
-func (renderer *diffRenderer) remember(key, output string) {
+func (renderer *diffRenderer) cached(key string, now time.Time) (string, bool) {
 	renderer.mu.Lock()
-	renderer.cache[key] = output
-	renderer.mu.Unlock()
+	defer renderer.mu.Unlock()
+	entry, ok := renderer.cache[key]
+	if !ok {
+		return "", false
+	}
+	if now.Sub(entry.stored) > diffCacheTTL {
+		delete(renderer.cache, key)
+		return "", false
+	}
+	return entry.output, true
+}
+
+func (renderer *diffRenderer) remember(key, output string) {
+	renderer.rememberAt(key, output, time.Now())
+}
+
+func (renderer *diffRenderer) rememberAt(key, output string, stored time.Time) {
+	renderer.mu.Lock()
+	defer renderer.mu.Unlock()
+	if _, exists := renderer.cache[key]; !exists && len(renderer.cache) >= diffCacheMaxEntries {
+		oldestKey := ""
+		var oldest time.Time
+		for candidate, entry := range renderer.cache {
+			if oldestKey == "" || entry.stored.Before(oldest) {
+				oldestKey = candidate
+				oldest = entry.stored
+			}
+		}
+		delete(renderer.cache, oldestKey)
+	}
+	renderer.cache[key] = diffCacheEntry{output: output, stored: stored}
 }
 
 func (renderer *diffRenderer) external(patch string, width int) string {
@@ -181,24 +216,24 @@ func diffCacheDirectory() string {
 	return filepath.Join(root, "traces", "diffs")
 }
 
-func readDiffCache(key string) string {
+func readDiffCache(key string) (string, time.Time) {
 	path := diffCachePath(key)
 	if path == "" {
-		return ""
+		return "", time.Time{}
 	}
 	info, err := os.Stat(path)
 	if err != nil {
-		return ""
+		return "", time.Time{}
 	}
 	if time.Since(info.ModTime()) > diffCacheTTL {
 		_ = os.Remove(path)
-		return ""
+		return "", time.Time{}
 	}
 	data, err := os.ReadFile(path)
 	if err != nil || len(data) == 0 {
-		return ""
+		return "", time.Time{}
 	}
-	return string(data)
+	return string(data), info.ModTime()
 }
 
 func writeDiffCache(key, output string) {

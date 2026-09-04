@@ -19,7 +19,7 @@ import (
 )
 
 func TestChangesTabRendersEditOutput(t *testing.T) {
-	t.Setenv("XDG_CACHE_HOME", t.TempDir())
+	isolateDiffCache(t)
 	patch := `## internal/file.go
 
 @@ -1 +1 @@
@@ -34,7 +34,7 @@ func TestChangesTabRendersEditOutput(t *testing.T) {
 }
 
 func TestDiffRendererFallsBackWithoutProvider(t *testing.T) {
-	t.Setenv("XDG_CACHE_HOME", t.TempDir())
+	isolateDiffCache(t)
 	patch := `--- a/file.go
 +++ b/file.go
 @@ -1 +1 @@
@@ -48,6 +48,7 @@ func TestDiffRendererFallsBackWithoutProvider(t *testing.T) {
 }
 
 func TestDiffProviderCachesByContentAndWidth(t *testing.T) {
+	isolateDiffCache(t)
 	dir := t.TempDir()
 	counter := filepath.Join(dir, "calls")
 	provider := filepath.Join(dir, "provider")
@@ -78,7 +79,7 @@ printf 'provider view\n'
 }
 
 func TestDiffProviderReceivesTwoFileArguments(t *testing.T) {
-	t.Setenv("XDG_CACHE_HOME", t.TempDir())
+	isolateDiffCache(t)
 	directory := t.TempDir()
 	provider := filepath.Join(directory, "provider")
 	script := `#!/bin/sh
