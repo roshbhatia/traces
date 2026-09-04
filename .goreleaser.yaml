@@ -6,6 +6,8 @@ builds:
     binary: traces
     env:
       - CGO_ENABLED=0
+    flags: [-trimpath]
+    mod_timestamp: "{{ .CommitTimestamp }}"
     goos: [darwin, linux]
     goarch: [amd64, arm64]
   - id: traces-full-core
@@ -13,6 +15,8 @@ builds:
     binary: .traces-core
     env:
       - CGO_ENABLED=0
+    flags: [-trimpath]
+    mod_timestamp: "{{ .CommitTimestamp }}"
     goos: [darwin, linux]
     goarch: [amd64, arm64]
   - id: traces-full-launcher
@@ -20,6 +24,8 @@ builds:
     binary: traces
     env:
       - CGO_ENABLED=0
+    flags: [-trimpath]
+    mod_timestamp: "{{ .CommitTimestamp }}"
     goos: [darwin, linux]
     goarch: [amd64, arm64]
   - id: traces-provider-claude
@@ -27,6 +33,8 @@ builds:
     binary: traces-provider-claude
     env:
       - CGO_ENABLED=0
+    flags: [-trimpath]
+    mod_timestamp: "{{ .CommitTimestamp }}"
     goos: [darwin, linux]
     goarch: [amd64, arm64]
   - id: traces-provider-codex
@@ -34,6 +42,8 @@ builds:
     binary: traces-provider-codex
     env:
       - CGO_ENABLED=0
+    flags: [-trimpath]
+    mod_timestamp: "{{ .CommitTimestamp }}"
     goos: [darwin, linux]
     goarch: [amd64, arm64]
   - id: traces-provider-opencode
@@ -41,6 +51,8 @@ builds:
     binary: traces-provider-opencode
     env:
       - CGO_ENABLED=0
+    flags: [-trimpath]
+    mod_timestamp: "{{ .CommitTimestamp }}"
     goos: [darwin, linux]
     goarch: [amd64, arm64]
   - id: traces-provider-git
@@ -48,6 +60,8 @@ builds:
     binary: traces-provider-git
     env:
       - CGO_ENABLED=0
+    flags: [-trimpath]
+    mod_timestamp: "{{ .CommitTimestamp }}"
     goos: [darwin, linux]
     goarch: [amd64, arm64]
   - id: traces-provider-desktop
@@ -55,6 +69,8 @@ builds:
     binary: traces-provider-desktop
     env:
       - CGO_ENABLED=0
+    flags: [-trimpath]
+    mod_timestamp: "{{ .CommitTimestamp }}"
     goos: [darwin, linux]
     goarch: [amd64, arm64]
 
@@ -69,6 +85,10 @@ archives:
       - LICENSE
       - src: completions/*
         dst: completions
+      - src: schema/*.cue
+        dst: schema
+      - src: schema/*.json
+        dst: schema
   - id: full
     ids:
       - traces-full-core
@@ -86,6 +106,10 @@ archives:
       - LICENSE
       - src: completions/*
         dst: completions
+      - src: schema/*.cue
+        dst: schema
+      - src: schema/*.json
+        dst: schema
       - src: extras/claude/provider.yaml
         dst: share/traces/providers/claude/provider.yaml
       - src: extras/codex/provider.yaml
@@ -152,26 +176,3 @@ checksum:
 
 changelog:
   use: github-native
-
-homebrew_casks:
-  - name: traces
-    ids: [core]
-    binaries: [traces]
-    homepage: https://github.com/roshbhatia/traces
-    description: Inspect agent activity as a trace tree
-    license: MIT
-    completions:
-      bash: completions/traces.bash
-      zsh: completions/_traces
-      fish: completions/traces.fish
-    hooks:
-      post:
-        install: |
-          system_command "/bin/mkdir", args: ["-p", "#{HOMEBREW_PREFIX}/share/nushell/vendor/autoload"]
-          system_command "/bin/cp", args: ["#{staged_path}/completions/traces.nu", "#{HOMEBREW_PREFIX}/share/nushell/vendor/autoload/traces.nu"]
-        uninstall: |
-          system_command "/bin/rm", args: ["-f", "#{HOMEBREW_PREFIX}/share/nushell/vendor/autoload/traces.nu"]
-    repository:
-      owner: roshbhatia
-      name: homebrew-tap
-      token: "{{ .Env.HOMEBREW_TAP_TOKEN }}"
