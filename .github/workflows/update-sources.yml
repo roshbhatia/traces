@@ -1,0 +1,112 @@
+name: Update sources
+
+on:
+  schedule:
+    - cron: "0 */6 * * *"
+  workflow_dispatch: {}
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    outputs:
+      head-sha: ${{ steps.cpr.outputs.pull-request-head-sha }}
+      operation: ${{ steps.cpr.outputs.pull-request-operation }}
+      pull-request-number: ${{ steps.cpr.outputs.pull-request-number }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+
+      - uses: DeterminateSystems/nix-installer-action@ef8a148080ab6020fd15196c2084a2eea5ff2d25
+
+      - name: Configure git
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+      - name: Update Go modules
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          nix develop --command go get -u ./...
+          nix develop --command go mod tidy
+
+      - name: Update flake inputs
+        env:
+          NIX_CONFIG: "access-tokens = github.com=${{ secrets.GITHUB_TOKEN }}"
+        run: nix flake update
+
+      - name: Update Go vendor hash
+        run: ./hack/update-vendor-hash.sh
+
+      - name: Verify updates
+        run: nix flake check --print-build-logs
+
+      - name: Create pull request
+        id: cpr
+        uses: peter-evans/create-pull-request@5f6978faf089d4d20b00c7766989d076bb2fc7f1
+        with:
+          token: ${{ github.token }}
+          branch: automation/update-sources
+          delete-branch: true
+          title: "chore: update Go modules and flake inputs"
+          commit-message: "chore: update Go modules and flake inputs"
+          body: |
+            Automated update:
+            - Updated Go modules
+            - Updated flake inputs
+            - Regenerated the Nix Go vendor hash
+
+  verify:
+    name: Verify ${{ matrix.system }}
+    needs: update
+    if: >-
+      needs.update.outputs.operation == 'created' ||
+      needs.update.outputs.operation == 'updated'
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: ubuntu-latest
+            system: x86_64-linux
+          - runner: ubuntu-24.04-arm
+            system: aarch64-linux
+          - runner: macos-15
+            system: aarch64-darwin
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: ${{ needs.update.outputs.head-sha }}
+
+      - uses: cachix/install-nix-action@13d8dd58da0234aa297dedd986986ccb8e7f3e24
+
+      - name: Verify runner architecture
+        run: test "$(nix eval --impure --raw --expr builtins.currentSystem)" = "${{ matrix.system }}"
+
+      - run: nix flake check --print-build-logs
+
+  merge:
+    name: Merge verified update
+    needs: [update, verify]
+    if: >-
+      needs.update.outputs.operation == 'created' ||
+      needs.update.outputs.operation == 'updated'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Merge pull request
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          pr="${{ needs.update.outputs.pull-request-number }}"
+          if [ -z "$pr" ]; then
+            echo "No pull request number was returned."
+            exit 0
+          fi
+          gh pr merge "$pr" \
+            --repo "$GITHUB_REPOSITORY" \
+            --match-head-commit "${{ needs.update.outputs.head-sha }}" \
+            --squash \
+            --delete-branch

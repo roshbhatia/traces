@@ -11,8 +11,21 @@ permissions:
 
 jobs:
   check:
-    runs-on: ubuntu-latest
+    name: Check ${{ matrix.system }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: ubuntu-latest
+            system: x86_64-linux
+          - runner: ubuntu-24.04-arm
+            system: aarch64-linux
+          - runner: macos-15
+            system: aarch64-darwin
+    runs-on: ${{ matrix.runner }}
     steps:
       - uses: actions/checkout@v7
       - uses: cachix/install-nix-action@v31
+      - name: Verify runner architecture
+        run: test "$(nix eval --impure --raw --expr builtins.currentSystem)" = "${{ matrix.system }}"
       - run: nix flake check --print-build-logs

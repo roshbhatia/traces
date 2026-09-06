@@ -8,8 +8,7 @@ builds:
       - CGO_ENABLED=0
     flags: [-trimpath]
     mod_timestamp: "{{ .CommitTimestamp }}"
-    goos: [darwin, linux]
-    goarch: [amd64, arm64]
+    targets: [darwin_arm64, linux_amd64, linux_arm64]
   - id: traces-full-core
     main: .
     binary: .traces-core
@@ -17,8 +16,7 @@ builds:
       - CGO_ENABLED=0
     flags: [-trimpath]
     mod_timestamp: "{{ .CommitTimestamp }}"
-    goos: [darwin, linux]
-    goarch: [amd64, arm64]
+    targets: [darwin_arm64, linux_amd64, linux_arm64]
   - id: traces-full-launcher
     main: ./cmd/traces-full
     binary: traces
@@ -26,8 +24,7 @@ builds:
       - CGO_ENABLED=0
     flags: [-trimpath]
     mod_timestamp: "{{ .CommitTimestamp }}"
-    goos: [darwin, linux]
-    goarch: [amd64, arm64]
+    targets: [darwin_arm64, linux_amd64, linux_arm64]
   - id: traces-provider-claude
     main: ./extras/claude
     binary: traces-provider-claude
@@ -35,8 +32,7 @@ builds:
       - CGO_ENABLED=0
     flags: [-trimpath]
     mod_timestamp: "{{ .CommitTimestamp }}"
-    goos: [darwin, linux]
-    goarch: [amd64, arm64]
+    targets: [darwin_arm64, linux_amd64, linux_arm64]
   - id: traces-provider-codex
     main: ./extras/codex
     binary: traces-provider-codex
@@ -44,8 +40,7 @@ builds:
       - CGO_ENABLED=0
     flags: [-trimpath]
     mod_timestamp: "{{ .CommitTimestamp }}"
-    goos: [darwin, linux]
-    goarch: [amd64, arm64]
+    targets: [darwin_arm64, linux_amd64, linux_arm64]
   - id: traces-provider-opencode
     main: ./extras/opencode
     binary: traces-provider-opencode
@@ -53,8 +48,7 @@ builds:
       - CGO_ENABLED=0
     flags: [-trimpath]
     mod_timestamp: "{{ .CommitTimestamp }}"
-    goos: [darwin, linux]
-    goarch: [amd64, arm64]
+    targets: [darwin_arm64, linux_amd64, linux_arm64]
   - id: traces-provider-git
     main: ./extras/git
     binary: traces-provider-git
@@ -62,8 +56,7 @@ builds:
       - CGO_ENABLED=0
     flags: [-trimpath]
     mod_timestamp: "{{ .CommitTimestamp }}"
-    goos: [darwin, linux]
-    goarch: [amd64, arm64]
+    targets: [darwin_arm64, linux_amd64, linux_arm64]
   - id: traces-provider-desktop
     main: ./extras/desktop
     binary: traces-provider-desktop
@@ -71,8 +64,7 @@ builds:
       - CGO_ENABLED=0
     flags: [-trimpath]
     mod_timestamp: "{{ .CommitTimestamp }}"
-    goos: [darwin, linux]
-    goarch: [amd64, arm64]
+    targets: [darwin_arm64, linux_amd64, linux_arm64]
 
 archives:
   - id: core
