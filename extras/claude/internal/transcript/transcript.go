@@ -63,6 +63,19 @@ func Root() string {
 // when its own mtime is inside it, because a project directory holds every
 // session ever run and the current one is a few of them.
 func Read(root string, window time.Duration, session string) otlp.Batch {
+	return read(root, window, session, false)
+}
+
+// ReadExact reads one native session regardless of transcript age. File names
+// and decoded session metadata must match exactly before activity is returned.
+func ReadExact(root, session string) otlp.Batch {
+	if session == "" {
+		return otlp.Batch{}
+	}
+	return read(root, 0, session, true)
+}
+
+func read(root string, window time.Duration, session string, exact bool) otlp.Batch {
 	out := otlp.Batch{}
 	if root == "" {
 		return out
@@ -84,19 +97,40 @@ func Read(root string, window time.Duration, session string) otlp.Batch {
 			if !strings.HasSuffix(f.Name(), ".jsonl") {
 				continue
 			}
-			if session != "" && !strings.Contains(f.Name(), session) {
+			path := filepath.Join(root, dir.Name(), f.Name())
+			if session != "" && !transcriptMatchesSession(path, f.Name(), session, exact) {
 				continue
 			}
 			info, err := f.Info()
-			if err != nil || info.ModTime().Before(since) {
+			if err != nil || (!exact && info.ModTime().Before(since)) {
 				continue
 			}
-			one := ReadFile(filepath.Join(root, dir.Name(), f.Name()))
+			one := ReadFile(path)
 			out.Spans = append(out.Spans, one.Spans...)
 			out.Records = append(out.Records, one.Records...)
 		}
 	}
 	return out
+}
+
+func transcriptMatchesSession(path, name, session string, exact bool) bool {
+	if !exact {
+		return strings.Contains(name, session)
+	}
+	f, err := os.Open(path)
+	if err != nil {
+		return false
+	}
+	defer func() { _ = f.Close() }()
+	scan := bufio.NewScanner(f)
+	scan.Buffer(make([]byte, 0, 64<<10), maxLine)
+	for scan.Scan() {
+		var one entry
+		if json.Unmarshal(scan.Bytes(), &one) == nil && one.SessionID != "" {
+			return one.SessionID == session
+		}
+	}
+	return false
 }
 
 // entry is the subset of a transcript line this package reads. Claude Code

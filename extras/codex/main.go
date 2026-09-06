@@ -16,13 +16,21 @@ func main() {
 	action := flag.String("action", "activity", "provider action")
 	since := flag.Duration("since", 2*time.Hour, "activity window")
 	session := flag.String("session", "", "session id or prefix")
+	exactSession := flag.String("exact-session", "", "exact session id, including archived sessions")
 	_ = flag.String("directory", "", "workspace directory")
 	flag.Parse()
 	if *action == "current" {
 		fmt.Println(firstEnvironment("CODEX_SESSION_ID", "CODEX_THREAD_ID"))
 		return
 	}
+	if *session != "" && *exactSession != "" {
+		fmt.Fprintln(os.Stderr, "--session and --exact-session are mutually exclusive")
+		os.Exit(1)
+	}
 	batch := rollout.Read(rollout.Root(), *since, *session)
+	if *exactSession != "" {
+		batch = rollout.ReadExact(rollout.Root(), *exactSession)
+	}
 	if err := source.Encode(os.Stdout, batch); err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)

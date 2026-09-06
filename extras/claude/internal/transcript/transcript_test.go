@@ -3,6 +3,7 @@ package transcript
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -139,5 +140,36 @@ func TestReadCarriesTheText(t *testing.T) {
 func TestSessionFilterSkipsOtherFiles(t *testing.T) {
 	if got := Read(write(t), time.Hour, "other"); len(got.Spans) != 0 {
 		t.Errorf("filter let %d spans through", len(got.Spans))
+	}
+}
+
+func TestReadExactFindsArchivedSessionWithoutMatchingPrefixCollision(t *testing.T) {
+	root := write(t)
+	project := filepath.Join(root, "-repo")
+	other := strings.ReplaceAll(fixture, `"sessionId":"s1"`, `"sessionId":"s1-extra"`)
+	if err := os.WriteFile(filepath.Join(project, "s1-extra.jsonl"), []byte(other), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	entries, err := os.ReadDir(project)
+	if err != nil {
+		t.Fatal(err)
+	}
+	old := time.Now().Add(-30 * 24 * time.Hour)
+	for _, entry := range entries {
+		if err := os.Chtimes(filepath.Join(project, entry.Name()), old, old); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if got := Read(root, time.Hour, "s1"); len(got.Spans) != 0 {
+		t.Fatalf("ordinary read returned %d archived spans", len(got.Spans))
+	}
+	batch := ReadExact(root, "s1")
+	if len(batch.Spans) != 3 {
+		t.Fatalf("exact archived read returned %d spans", len(batch.Spans))
+	}
+	for _, span := range batch.Spans {
+		if span.Session != "s1" {
+			t.Fatalf("exact read included session %q", span.Session)
+		}
 	}
 }

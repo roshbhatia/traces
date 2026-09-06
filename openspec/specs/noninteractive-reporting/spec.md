@@ -9,8 +9,9 @@ Define the finite list, tree, and machine-readable reporting modes of Traces.
 
 ### Requirement: Finite reporting modes
 
-`--list`, `--once`, and `--json` MUST read the selected sources, produce their
-requested output, and terminate without starting the interactive interface.
+`--list`, `--once`, `--json`, and `--view output` MUST read the selected sources,
+produce their requested output, and terminate without starting the interactive
+interface.
 
 #### Scenario: Session list is requested
 
@@ -21,6 +22,29 @@ requested output, and terminate without starting the interactive interface.
 
 - **WHEN** a user supplies `--once`
 - **THEN** Traces MUST print one uncolored activity tree and terminate
+
+#### Scenario: Exact assistant output is requested
+
+- **WHEN** a user supplies `--view output` and an exact session identity
+- **THEN** Traces MUST print a bounded chronological stream of visible assistant text and terminate
+
+### Requirement: Assistant output composition
+
+Output view MUST select an exact session. It MUST merge and deduplicate
+normalized assistant records from all selected providers. It MUST omit user
+prompts, private reasoning, tool calls, and tool results. Plain output MUST
+remove terminal control sequences. Colored output MUST retain only SGR palette
+sequences.
+
+#### Scenario: Providers repeat one native reply
+
+- **WHEN** several providers report the same assistant reply for the selected session
+- **THEN** output view MUST print the reply once
+
+#### Scenario: A record contains a terminal side effect
+
+- **WHEN** an assistant record contains an OSC or non-SGR escape sequence
+- **THEN** output view MUST omit that sequence from colored and plain output
 
 ### Requirement: Machine-readable output
 
@@ -35,9 +59,11 @@ from the same service.
 
 ### Requirement: Report failure status
 
-A local source read failure MUST return exit status 1. Provider fetch failures
-MUST be reported while allowing successful sources to produce partial output.
-One-shot tree output MUST return exit status 2 when any selected span failed.
+An explicit local source read failure MUST return exit status 1. A missing
+default collector file MAY be ignored when an activity provider is selected.
+Provider fetch failures MUST be reported while allowing successful sources to
+produce partial output. One-shot tree output MUST return exit status 2 when any
+selected span failed.
 
 #### Scenario: Local file cannot be read
 

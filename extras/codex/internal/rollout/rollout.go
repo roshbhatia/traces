@@ -35,6 +35,28 @@ func Root() string {
 
 // Read filters rollout files before parsing so attached views avoid old sessions.
 func Read(root string, window time.Duration, session string) otlp.Batch {
+	return read(root, window, session, false)
+}
+
+// ReadExact reads one native session regardless of file age. It still scans
+// only rollout files whose session metadata equals the requested identity.
+func ReadExact(root, session string) otlp.Batch {
+	if session == "" {
+		return otlp.Batch{}
+	}
+	batch := read(root, 0, session, true)
+	// Ordinary Traces views group subagent files under their root thread. An
+	// exact node read instead exposes the selected native thread identity.
+	for index := range batch.Spans {
+		batch.Spans[index].Session = session
+	}
+	for index := range batch.Records {
+		batch.Records[index].Session = session
+	}
+	return batch
+}
+
+func read(root string, window time.Duration, session string, exact bool) otlp.Batch {
 	out := otlp.Batch{}
 	if root == "" {
 		return out
@@ -44,11 +66,11 @@ func Read(root string, window time.Duration, session string) otlp.Batch {
 		if err != nil || entry.IsDir() || !strings.HasSuffix(entry.Name(), ".jsonl") {
 			return nil
 		}
-		if session != "" && !fileMatchesSession(path, session) {
+		if session != "" && !fileMatchesSession(path, session, exact) {
 			return nil
 		}
 		info, err := entry.Info()
-		if err != nil || info.ModTime().Before(since) {
+		if err != nil || (!exact && info.ModTime().Before(since)) {
 			return nil
 		}
 		one := ReadFile(path)
@@ -59,8 +81,9 @@ func Read(root string, window time.Duration, session string) otlp.Batch {
 	return out
 }
 
-func fileMatchesSession(path, session string) bool {
-	if strings.Contains(filepath.Base(path), session) {
+func fileMatchesSession(path, session string, exact bool) bool {
+	base := filepath.Base(path)
+	if !exact && strings.Contains(base, session) {
 		return true
 	}
 	f, err := os.Open(path)
@@ -80,8 +103,11 @@ func fileMatchesSession(path, session string) bool {
 			return false
 		}
 		var one meta
-		if json.Unmarshal(row.Payload, &one) == nil &&
-			(strings.Contains(one.SessionID, session) || strings.Contains(one.ID, session)) {
+		if json.Unmarshal(row.Payload, &one) != nil {
+			return false
+		}
+		if (exact && first(one.ID, one.SessionID) == session) ||
+			(!exact && (strings.Contains(one.SessionID, session) || strings.Contains(one.ID, session))) {
 			return true
 		}
 	}

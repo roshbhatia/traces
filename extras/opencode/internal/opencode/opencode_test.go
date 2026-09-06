@@ -5,6 +5,7 @@ import (
 	"strings"
 	"testing"
 	"text/template"
+	"time"
 )
 
 func TestDecodeNormalizesOpenCodeExport(t *testing.T) {
@@ -62,6 +63,20 @@ func TestDecodeNormalizesOpenCodeExport(t *testing.T) {
 	}
 	if batch.Records[0].Event != EventPrompt || batch.Records[0].Body != "fix it" {
 		t.Errorf("prompt = %#v", batch.Records[0])
+	}
+}
+
+func TestExactSessionQueryBypassesRecencyWithoutWideningIdentity(t *testing.T) {
+	exact := sessionQuery(time.Hour, "ses_'one", true)
+	if exact != "select id from session where id = 'ses_''one' order by time_updated desc" {
+		t.Fatalf("exact query = %q", exact)
+	}
+	if strings.Contains(exact, "time_updated >=") || strings.Contains(exact, " like ") {
+		t.Fatalf("exact query widened selection: %q", exact)
+	}
+	prefix := sessionQuery(time.Hour, "ses_", false)
+	if !strings.Contains(prefix, "time_updated >=") || !strings.Contains(prefix, "id like 'ses_%'") {
+		t.Fatalf("prefix query lost recency gate: %q", prefix)
 	}
 }
 

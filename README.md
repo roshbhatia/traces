@@ -50,6 +50,9 @@ traces
 # Produce a stable report for automation.
 traces --once --session 01abc --color never
 
+# Print only the visible assistant messages for one exact native session.
+traces --view output --session 01abc --service codex --color always
+
 # Keep the protocol composable in a pipeline.
 traces-provider-codex --since 30m | traces --file - --once
 ```
@@ -89,6 +92,17 @@ Each action defines direct argv and environment Go templates.
 Traces never inserts a shell. An activity provider writes newline-delimited
 spans and events to standard output. Several providers may serve one harness.
 Traces merges their output and removes duplicate spans.
+
+`--view output` is the bounded, non-interactive conversation view. It requires
+an exact `--session`, merges duplicate assistant records across sources, and
+prints the newest 64 KiB in chronological order. It omits prompts, reasoning,
+tool calls, and tool results. `--color never` removes terminal control
+sequences. `--color always` preserves only SGR palette colors.
+
+During an exact output read, `.ExactSession` is true in the `activity.read`
+template data. Archive providers can use it to select an exact native identity
+without applying their ordinary recency window. Prefix and discovery reads
+keep the window.
 
 Activity providers normalize native events to `agent.turn`, `agent.model`,
 `agent.tool`, or `agent.edit`. A tool span sets `traces.action` when its native
@@ -174,6 +188,7 @@ Inspect agent activity as a trace tree
 | `--service` `<value>` | Filter by service |
 | `--session` `<value>` | Attach by session ID or prefix |
 | `--since` `<value>` | Initial provider window |
+| `--view` `<value>` | Non-interactive view |
 
 ### `traces generate`
 

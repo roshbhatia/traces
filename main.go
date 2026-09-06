@@ -9,6 +9,7 @@ package main
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"flag"
 	"fmt"
 	"io"
@@ -63,6 +64,7 @@ func main() {
 	pinned := flag.String("session", "", "attach to this session, by id or prefix")
 	list := flag.Bool("list", false, "list the sessions and exit")
 	once := flag.Bool("once", false, "print the tree once and exit; status 2 when a span failed")
+	view := flag.String("view", "tree", "non-interactive view: tree or output")
 	asked := flag.String("provider", "", "read exactly these sources, comma separated, instead of the ones declared in "+source.ConfigFile(configPath))
 	back := flag.Duration("since", 2*time.Hour, "with a provider, how far back the first read reaches")
 	every := flag.Duration("poll", 15*time.Second, "with a provider, how often to re-read")
@@ -72,6 +74,20 @@ func main() {
 	service := flag.String("service", "", "keep only this service, by name or prefix")
 	color := flag.String("color", settings.Color, "color output: auto, always, or never")
 	flag.Parse()
+	if *view != "tree" && *view != "output" {
+		fmt.Fprintln(os.Stderr, "traces: -view must be tree or output")
+		os.Exit(1)
+	}
+	if *view == "output" {
+		if *pinned == "" {
+			fmt.Fprintln(os.Stderr, "traces: -view output requires an exact -session")
+			os.Exit(1)
+		}
+		if *list || *asJSON {
+			fmt.Fprintln(os.Stderr, "traces: -view output cannot be combined with -list or -json")
+			os.Exit(1)
+		}
+	}
 	switch *color {
 	case "auto":
 	case "always":
@@ -125,9 +141,11 @@ func main() {
 	for _, one := range providers {
 		one.Session = which
 		one.Directory = directory
+		one.ExactSession = *view == "output"
 	}
 
 	path := *file
+	localOptional := path == ""
 	if path == "" {
 		path = paths.OtelTelemetry()
 	}
@@ -141,12 +159,12 @@ func main() {
 	// local telemetry and command-backed activity visible in one view.
 	src := sources{
 		path: path, providers: providers, back: *back, every: *every, lag: *lag,
-		service: *service, diffProvider: diffProvider,
+		service: *service, localOptional: localOptional, diffProvider: diffProvider,
 		clipboardProvider: clipboardProvider, documentProvider: documentProvider,
 	}
 
-	if *asJSON || *list || *once {
-		os.Exit(src.report(which, scope, directory, *list, *asJSON))
+	if *asJSON || *list || *once || *view == "output" {
+		os.Exit(src.report(which, scope, directory, *list, *asJSON, *view, providerColor(*color)))
 	}
 	os.Exit(src.watch(which, scope, directory))
 }
@@ -199,6 +217,7 @@ func commandMetadata() completion.Command {
 			{Name: "service", Description: "Filter by service", Value: true},
 			{Name: "session", Description: "Attach by session ID or prefix", Value: true},
 			{Name: "since", Description: "Initial provider window", Value: true},
+			{Name: "view", Description: "Non-interactive view", Value: true, Values: []string{"tree", "output"}},
 		},
 		Subcommands: []completion.Command{{
 			Name:        "generate",
@@ -590,6 +609,7 @@ type sources struct {
 	every             time.Duration
 	lag               time.Duration
 	service           string
+	localOptional     bool
 	diffProvider      *source.Provider
 	clipboardProvider *source.Provider
 	documentProvider  *source.Provider
@@ -678,11 +698,23 @@ func (s sources) keep(in otlp.Batch) otlp.Batch {
 	return out
 }
 
-func (s sources) report(which string, scope []string, directory string, listing, asJSON bool) int {
+func (s sources) report(
+	which string,
+	scope []string,
+	directory string,
+	listing bool,
+	asJSON bool,
+	view string,
+	color string,
+) int {
 	batch, err := s.read()
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "traces: %v\n", err)
-		return 1
+		// An activity provider is a complete source. A missing optional local
+		// collector must not hide its answer in provider-only installations.
+		if len(s.providers) == 0 || !s.localOptional || !errors.Is(err, os.ErrNotExist) {
+			fmt.Fprintf(os.Stderr, "traces: %v\n", err)
+			return 1
+		}
 	}
 	if len(s.providers) > 0 {
 		// The file already answered, so a provider that cannot run costs its
@@ -694,6 +726,10 @@ func (s sources) report(which string, scope []string, directory string, listing,
 		batch.Records = append(batch.Records, read.Records...)
 	}
 	batch = s.keep(batch)
+	if view == "output" {
+		ui.PrintMessages(os.Stdout, session.AssistantMessages(batch, which), color)
+		return 0
+	}
 	if asJSON {
 		// A filter the reader gave has to reach every output, including JSON.
 		if err := source.Encode(os.Stdout, only(batch, which, scope, directory)); err != nil {

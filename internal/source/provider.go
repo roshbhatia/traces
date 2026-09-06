@@ -87,6 +87,10 @@ type Provider struct {
 	// Session narrows the read when the provider can do it. traces resolves a
 	// prefix itself, so a provider may ignore this.
 	Session string
+	// ExactSession tells a provider that Session is a complete native identity.
+	// Bundled archive readers use it to bypass recency gates without widening a
+	// prefix search over old data.
+	ExactSession bool
 	// Directory lets providers find workspace-scoped sources such as commits.
 	Directory string
 	// Color is the caller's output policy for rendering actions.
@@ -98,15 +102,16 @@ type Provider struct {
 }
 
 type actionData struct {
-	Since     string
-	Session   string
-	Directory string
-	Local     string
-	Remote    string
-	Merged    string
-	Path      string
-	Width     int
-	Color     string
+	Since        string
+	Session      string
+	ExactSession bool
+	Directory    string
+	Local        string
+	Remote       string
+	Merged       string
+	Path         string
+	Width        int
+	Color        string
 }
 
 type providerValidationCheck struct {
@@ -1227,7 +1232,8 @@ func ResolveNamed(name, action string, registry Registry) (*Provider, error) {
 // Fetch runs the provider once over the window ending now.
 func (p Provider) Fetch(ctx context.Context, window time.Duration) (otlp.Batch, error) {
 	plan, err := p.Manifest.Render(ActionActivityRead, actionData{
-		Since: window.Round(time.Second).String(), Session: p.Session, Directory: p.Directory,
+		Since: window.Round(time.Second).String(), Session: p.Session,
+		ExactSession: p.ExactSession, Directory: p.Directory,
 	})
 	if err != nil {
 		return otlp.Batch{}, fmt.Errorf("%s: %w", p.Name, err)

@@ -12,6 +12,7 @@ export extern "traces" [
   --service: string # Filter by service
   --session: string # Attach by session ID or prefix
   --since: string # Initial provider window
+  --view: string@"__traces_completion_values_2" # Non-interactive view
   ...args: string@"__traces_completion_none"
 ]
 
@@ -34,13 +35,13 @@ export extern "traces provider list" [
   --config: string # YAML configuration file
   --json # Print JSON
   --names # Print provider names, one per line
-  ...args: string@"__traces_completion_values_2"
+  ...args: string@"__traces_completion_values_3"
 ]
 
 export extern "traces provider validate" [
   --config: string # YAML configuration file
   --json # Print JSON
-  ...args: string@"__traces_completion_values_3"
+  ...args: string@"__traces_completion_values_4"
 ]
 
 def "__traces_completion_none" [] { [] }
@@ -61,11 +62,18 @@ def "__traces_completion_values_1" [context?: string] {
 
 def "__traces_completion_values_2" [context?: string] {
   [
-    (try { run-external "traces" "provider" "complete" ($context | default "") | lines } catch { [] })
+    "tree"
+    "output"
   ] | flatten | uniq
 }
 
 def "__traces_completion_values_3" [context?: string] {
+  [
+    (try { run-external "traces" "provider" "complete" ($context | default "") | lines } catch { [] })
+  ] | flatten | uniq
+}
+
+def "__traces_completion_values_4" [context?: string] {
   [
     (try { run-external "traces" "provider" "complete" ($context | default "") | lines } catch { [] })
   ] | flatten | uniq

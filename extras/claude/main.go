@@ -20,6 +20,7 @@ func main() {
 	action := flag.String("action", "activity", "provider action")
 	since := flag.Duration("since", 2*time.Hour, "activity window")
 	session := flag.String("session", "", "session id or prefix")
+	exactSession := flag.String("exact-session", "", "exact session id, including archived sessions")
 	directory := flag.String("directory", os.Getenv("TRACES_DIRECTORY"), "workspace directory")
 	flag.Parse()
 	switch *action {
@@ -32,7 +33,14 @@ func main() {
 		}
 		return
 	}
+	if *session != "" && *exactSession != "" {
+		fmt.Fprintln(os.Stderr, "--session and --exact-session are mutually exclusive")
+		os.Exit(1)
+	}
 	batch := transcript.Read(transcript.Root(), *since, *session)
+	if *exactSession != "" {
+		batch = transcript.ReadExact(transcript.Root(), *exactSession)
+	}
 	if err := source.Encode(os.Stdout, batch); err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)

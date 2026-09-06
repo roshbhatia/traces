@@ -120,7 +120,26 @@ type turn struct {
 }
 
 func Read(ctx context.Context, binary string, window time.Duration, selector, directory string) (otlp.Batch, error) {
-	ids, err := sessionIDs(ctx, binary, window, selector, directory)
+	return read(ctx, binary, window, selector, directory, false)
+}
+
+// ReadExact exports one native session without applying the discovery window.
+func ReadExact(ctx context.Context, binary, session, directory string) (otlp.Batch, error) {
+	if session == "" {
+		return otlp.Batch{}, nil
+	}
+	return read(ctx, binary, 0, session, directory, true)
+}
+
+func read(
+	ctx context.Context,
+	binary string,
+	window time.Duration,
+	selector string,
+	directory string,
+	exact bool,
+) (otlp.Batch, error) {
+	ids, err := sessionIDs(ctx, binary, window, selector, directory, exact)
 	if err != nil {
 		return otlp.Batch{}, err
 	}
@@ -140,12 +159,15 @@ func Read(ctx context.Context, binary string, window time.Duration, selector, di
 	return out, nil
 }
 
-func sessionIDs(ctx context.Context, binary string, window time.Duration, selector, directory string) ([]string, error) {
-	query := "select id from session where time_updated >= " + strconv.FormatInt(time.Now().Add(-window).UnixMilli(), 10)
-	if selector != "" {
-		query += " and id like '" + strings.ReplaceAll(selector, "'", "''") + "%'"
-	}
-	query += " order by time_updated desc"
+func sessionIDs(
+	ctx context.Context,
+	binary string,
+	window time.Duration,
+	selector string,
+	directory string,
+	exact bool,
+) ([]string, error) {
+	query := sessionQuery(window, selector, exact)
 	blob, err := command(ctx, binary, directory, "db", "--pure", "--format", "json", query)
 	if err != nil {
 		return nil, err
@@ -161,6 +183,21 @@ func sessionIDs(ctx context.Context, binary string, window time.Duration, select
 		}
 	}
 	return ids, nil
+}
+
+func sessionQuery(window time.Duration, selector string, exact bool) string {
+	query := "select id from session"
+	escaped := strings.ReplaceAll(selector, "'", "''")
+	if exact {
+		query += " where id = '" + escaped + "'"
+	} else {
+		query += " where time_updated >= " + strconv.FormatInt(time.Now().Add(-window).UnixMilli(), 10)
+		if selector != "" {
+			query += " and id like '" + escaped + "%'"
+		}
+	}
+	query += " order by time_updated desc"
+	return query
 }
 
 func command(ctx context.Context, binary, directory string, args ...string) ([]byte, error) {

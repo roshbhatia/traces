@@ -19,6 +19,7 @@ func main() {
 	action := flag.String("action", "activity", "provider action")
 	since := flag.Duration("since", 2*time.Hour, "activity window")
 	session := flag.String("session", "", "session id or prefix")
+	exactSession := flag.String("exact-session", "", "exact session id, including archived sessions")
 	directory := flag.String("directory", os.Getenv("TRACES_DIRECTORY"), "workspace directory")
 	flag.Parse()
 	if *action == "validate" {
@@ -40,7 +41,14 @@ func main() {
 		fmt.Println(firstEnvironment("OPENCODE_SESSION_ID"))
 		return
 	}
+	if *session != "" && *exactSession != "" {
+		fmt.Fprintln(os.Stderr, "--session and --exact-session are mutually exclusive")
+		os.Exit(1)
+	}
 	batch, err := opencode.Read(context.Background(), "opencode", *since, *session, *directory)
+	if *exactSession != "" {
+		batch, err = opencode.ReadExact(context.Background(), "opencode", *exactSession, *directory)
+	}
 	if err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)

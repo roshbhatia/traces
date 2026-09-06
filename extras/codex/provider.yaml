@@ -9,7 +9,13 @@ defaults:
 actions:
   activity.read:
     description: Read activity inside a time and session window
-    argv: [--since, "{{ .Since }}", --session, "{{ .Session }}", --directory, "{{ .Directory }}"]
+    argv:
+      - --since
+      - "{{ .Since }}"
+      - "{{ if .ExactSession }}--exact-session{{ else }}--session{{ end }}"
+      - "{{ .Session }}"
+      - --directory
+      - "{{ .Directory }}"
     env:
       TRACES_DIRECTORY: "{{ .Directory }}"
       TRACES_SESSION: "{{ .Session }}"

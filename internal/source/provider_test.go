@@ -267,15 +267,19 @@ func TestFetchRendersArgumentsAndEnvironmentWithoutAWrapper(t *testing.T) {
 test "$2" = "session with spaces"
 test -d "$3"
 test "$EXPECTED_SESSION" = "$2"
+test "$4" = "exact"
 cat <<'JSON'
 {"traceId":"demo","spanId":"root","name":"rendered"}
 JSON
 `,
-			"provider", "{{ .Since }}", "{{ .Session }}", "{{ .Directory }}",
+			"provider", "{{ .Since }}", "{{ .Session }}", "{{ .Directory }}", "{{ if .ExactSession }}exact{{ else }}window{{ end }}",
 		},
 		Env: map[string]string{"EXPECTED_SESSION": "{{ .Session }}"},
 	}
-	provider := Provider{Manifest: manifest, Name: "render", Session: "session with spaces", Directory: directory}
+	provider := Provider{
+		Manifest: manifest, Name: "render", Session: "session with spaces",
+		Directory: directory, ExactSession: true,
+	}
 	batch, err := provider.Fetch(context.Background(), 2*time.Minute)
 	if err != nil {
 		t.Fatal(err)

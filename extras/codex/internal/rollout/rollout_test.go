@@ -101,6 +101,7 @@ func TestReadFilePreservesSubagentActor(t *testing.T) {
 {"type":"session_meta","timestamp":"2026-08-27T15:03:46Z","payload":{"session_id":"root-session","id":"root-session","cwd":"/work/one","thread_source":"user"}}
 {"type":"event_msg","timestamp":"2026-08-27T15:03:47Z","payload":{"type":"task_started","turn_id":"child-turn","trace_id":"trace-1","started_at":1787843027}}
 {"type":"event_msg","timestamp":"2026-08-27T15:03:48Z","payload":{"type":"item_completed","thread_id":"child-session","turn_id":"child-turn","item":{"type":"CommandExecution","id":"command-1","command":["git","status"],"exit_code":0}}}
+{"type":"event_msg","timestamp":"2026-08-27T15:03:49Z","payload":{"type":"item_completed","thread_id":"child-session","turn_id":"child-turn","item":{"type":"AgentMessage","id":"reply-1","content":[{"type":"Text","text":"child answer"}]}}}
 `
 	if err := os.WriteFile(path, []byte(fixture), 0o600); err != nil {
 		t.Fatal(err)
@@ -149,13 +150,66 @@ func TestReadFindsSubagentFileByRootSession(t *testing.T) {
 	fixture := `{"type":"session_meta","timestamp":"2026-08-27T15:03:46Z","payload":{"session_id":"root-session","id":"child-session","cwd":"/work/one","thread_source":"subagent","agent_path":"/root/reviewer"}}
 {"type":"event_msg","timestamp":"2026-08-27T15:03:47Z","payload":{"type":"task_started","turn_id":"child-turn","trace_id":"trace-1","started_at":1787843027}}
 {"type":"event_msg","timestamp":"2026-08-27T15:03:48Z","payload":{"type":"item_completed","thread_id":"child-session","turn_id":"child-turn","item":{"type":"CommandExecution","id":"command-1","command":["git","status"],"exit_code":0}}}
+{"type":"event_msg","timestamp":"2026-08-27T15:03:49Z","payload":{"type":"item_completed","thread_id":"child-session","turn_id":"child-turn","item":{"type":"AgentMessage","id":"reply-1","content":[{"type":"Text","text":"child answer"}]}}}
 `
 	if err := os.WriteFile(path, []byte(fixture), 0o600); err != nil {
 		t.Fatal(err)
 	}
 
 	batch := Read(dir, time.Hour, "root-session")
-	if got, want := len(batch.Spans), 2; got != want {
+	if got, want := len(batch.Spans), 3; got != want {
 		t.Fatalf("spans = %d, want %d", got, want)
+	}
+	if root := ReadExact(dir, "root-session"); len(root.Spans) != 0 {
+		t.Fatalf("exact root read included %d child spans", len(root.Spans))
+	}
+	child := ReadExact(dir, "child-session")
+	if got, want := len(child.Spans), 3; got != want {
+		t.Fatalf("exact child read returned %d spans, want %d", got, want)
+	}
+	for _, span := range child.Spans {
+		if span.Session != "child-session" {
+			t.Fatalf("exact child span session = %q", span.Session)
+		}
+	}
+	foundReply := false
+	for _, record := range child.Records {
+		if record.Event == EventText && record.Body == "child answer" && record.Session == "child-session" {
+			foundReply = true
+		}
+	}
+	if !foundReply {
+		t.Fatalf("exact child read omitted assistant reply: %#v", child.Records)
+	}
+}
+
+func TestReadExactFindsArchivedSessionWithoutMatchingPrefixCollision(t *testing.T) {
+	dir := t.TempDir()
+	wanted := filepath.Join(dir, "rollout-wanted.jsonl")
+	other := filepath.Join(dir, "rollout-wanted-extra.jsonl")
+	for path, session := range map[string]string{wanted: "wanted", other: "wanted-extra"} {
+		fixture := `{"type":"session_meta","timestamp":"2026-08-27T15:03:46Z","payload":{"id":"` + session + `","cwd":"/work"}}
+{"type":"event_msg","timestamp":"2026-08-27T15:03:47Z","payload":{"type":"task_started","turn_id":"turn","trace_id":"trace","started_at":1787843027}}
+{"type":"event_msg","timestamp":"2026-08-27T15:03:48Z","payload":{"type":"item_completed","thread_id":"` + session + `","turn_id":"turn","item":{"type":"AgentMessage","id":"message","content":[{"type":"Text","text":"done"}]}}}
+`
+		if err := os.WriteFile(path, []byte(fixture), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		old := time.Now().Add(-30 * 24 * time.Hour)
+		if err := os.Chtimes(path, old, old); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if got := Read(dir, time.Hour, "wanted"); len(got.Spans) != 0 {
+		t.Fatalf("ordinary read returned %d archived spans", len(got.Spans))
+	}
+	batch := ReadExact(dir, "wanted")
+	if len(batch.Spans) != 2 {
+		t.Fatalf("exact archived read returned %d spans", len(batch.Spans))
+	}
+	for _, span := range batch.Spans {
+		if span.Session != "wanted" {
+			t.Fatalf("exact read included session %q", span.Session)
+		}
 	}
 }

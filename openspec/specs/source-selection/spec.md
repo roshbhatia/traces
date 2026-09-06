@@ -46,6 +46,18 @@ equal the filter or start with its prefix.
 - **WHEN** a service filter is active
 - **THEN** Traces MUST omit spans and records whose service does not match the filter prefix
 
+### Requirement: Exact archive selection
+
+An exact output selection MUST expose its exactness to activity provider
+templates. A provider MAY bypass its default recency gate only when it can
+verify the complete native session identity. Prefix selection MUST retain the
+recency gate.
+
+#### Scenario: Exact session is older than the discovery window
+
+- **WHEN** output view selects a complete archived session identity
+- **THEN** an archive provider MUST return that session without widening the read to matching prefixes
+
 ### Requirement: Continuous following
 
 Interactive file following MUST retain partial lines, detect truncation, and

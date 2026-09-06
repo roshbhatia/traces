@@ -12,11 +12,16 @@ __traces_completion_values_1() {
 }
 __traces_completion_values_2() {
   local -a values
+  values=( 'tree' 'output')
+  compadd -a values
+}
+__traces_completion_values_3() {
+  local -a values
   values=()
   values+=("${(@f)$('traces' 'provider' 'complete' "${BUFFER[1,CURSOR]}" 2>/dev/null)}")
   compadd -a values
 }
-__traces_completion_values_3() {
+__traces_completion_values_4() {
   local -a values
   values=()
   values+=("${(@f)$('traces' 'provider' 'complete' "${BUFFER[1,CURSOR]}" 2>/dev/null)}")
@@ -59,6 +64,8 @@ _traces() {
       ':--session='*) continue ;;
       ':--since') consume_value=1; continue ;;
       ':--since='*) continue ;;
+      ':--view') consume_value=1; continue ;;
+      ':--view='*) continue ;;
       'provider list:--config') consume_value=1; continue ;;
       'provider list:--config='*) continue ;;
       'provider validate:--config') consume_value=1; continue ;;
@@ -88,6 +95,7 @@ _traces() {
         '--service[Filter by service]:value:' \
         '--session[Attach by session ID or prefix]:value:' \
         '--since[Initial provider window]:value:' \
+        '--view[Non-interactive view]:value:__traces_completion_values_2' \
         '1:command:(completion generate provider)'
 
       ;;
@@ -111,14 +119,14 @@ _traces() {
         '--config[YAML configuration file]:value:' \
         '--json[Print JSON]' \
         '--names[Print provider names, one per line]' \
-        '*:argument:__traces_completion_values_2'
+        '*:argument:__traces_completion_values_3'
 
       ;;
     'provider validate')
       _arguments \
         '--config[YAML configuration file]:value:' \
         '--json[Print JSON]' \
-        '*:argument:__traces_completion_values_3'
+        '*:argument:__traces_completion_values_4'
 
       ;;
   esac
