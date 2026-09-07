@@ -53,6 +53,9 @@ traces --once --session 01abc --color never
 # Print only the visible assistant messages for one exact native session.
 traces --view output --session 01abc --service codex --color always
 
+# Stream those messages as bounded records to another process.
+traces --view output --format jsonl --once --session 01abc --color never
+
 # Keep the protocol composable in a pipeline.
 traces-provider-codex --since 30m | traces --file - --once
 ```
@@ -98,6 +101,13 @@ an exact `--session`, merges duplicate assistant records across sources, and
 prints the newest 64 KiB in chronological order. It omits prompts, reasoning,
 tool calls, and tool results. `--color never` removes terminal control
 sequences. `--color always` preserves only SGR palette colors.
+
+`--view output --format jsonl` emits one `traces.message/v1` record per reply.
+Each record contains an `id` derived from the native reply identity, the exact
+native `session`, an RFC3339Nano `timestamp`, and a plain `body`. JSONL never
+contains terminal controls. The stream keeps complete newest records within
+the same 64 KiB bound. An
+oversized newest reply retains its tail and sets `truncated`.
 
 During an exact output read, `.ExactSession` is true in the `activity.read`
 template data. Archive providers can use it to select an exact native identity
@@ -179,7 +189,8 @@ Inspect agent activity as a trace tree
 | `--color` `<value>` | Color output |
 | `--config` `<value>` | YAML configuration file |
 | `--file` `<value>` | Read an OTLP JSON file |
-| `--json` | Print newline-delimited JSON |
+| `--format` `<value>` | Output view format |
+| `--json` | Print normalized activity as newline-delimited JSON |
 | `--lag` `<value>` | Provider overlap window |
 | `--list` | List sessions |
 | `--once` | Print one trace tree |

@@ -65,6 +65,7 @@ func main() {
 	list := flag.Bool("list", false, "list the sessions and exit")
 	once := flag.Bool("once", false, "print the tree once and exit; status 2 when a span failed")
 	view := flag.String("view", "tree", "non-interactive view: tree or output")
+	format := flag.String("format", "text", "output view format: text or jsonl")
 	asked := flag.String("provider", "", "read exactly these sources, comma separated, instead of the ones declared in "+source.ConfigFile(configPath))
 	back := flag.Duration("since", 2*time.Hour, "with a provider, how far back the first read reaches")
 	every := flag.Duration("poll", 15*time.Second, "with a provider, how often to re-read")
@@ -76,6 +77,14 @@ func main() {
 	flag.Parse()
 	if *view != "tree" && *view != "output" {
 		fmt.Fprintln(os.Stderr, "traces: -view must be tree or output")
+		os.Exit(1)
+	}
+	if *format != "text" && *format != "jsonl" {
+		fmt.Fprintln(os.Stderr, "traces: -format must be text or jsonl")
+		os.Exit(1)
+	}
+	if *view != "output" && *format != "text" {
+		fmt.Fprintln(os.Stderr, "traces: -format applies only to -view output")
 		os.Exit(1)
 	}
 	if *view == "output" {
@@ -164,7 +173,7 @@ func main() {
 	}
 
 	if *asJSON || *list || *once || *view == "output" {
-		os.Exit(src.report(which, scope, directory, *list, *asJSON, *view, providerColor(*color)))
+		os.Exit(src.report(which, scope, directory, *list, *asJSON, *view, *format, providerColor(*color)))
 	}
 	os.Exit(src.watch(which, scope, directory))
 }
@@ -205,7 +214,8 @@ func commandMetadata() completion.Command {
 			{Name: "color", Description: "Color output", Value: true, Values: []string{"auto", "always", "never"}},
 			{Name: "config", Description: "YAML configuration file", Value: true},
 			{Name: "file", Description: "Read an OTLP JSON file", Value: true},
-			{Name: "json", Description: "Print newline-delimited JSON"},
+			{Name: "format", Description: "Output view format", Value: true, Values: []string{"text", "jsonl"}},
+			{Name: "json", Description: "Print normalized activity as newline-delimited JSON"},
 			{Name: "lag", Description: "Provider overlap window", Value: true},
 			{Name: "list", Description: "List sessions"},
 			{Name: "once", Description: "Print one trace tree"},
@@ -705,6 +715,7 @@ func (s sources) report(
 	listing bool,
 	asJSON bool,
 	view string,
+	format string,
 	color string,
 ) int {
 	batch, err := s.read()
@@ -727,7 +738,15 @@ func (s sources) report(
 	}
 	batch = s.keep(batch)
 	if view == "output" {
-		ui.PrintMessages(os.Stdout, session.AssistantMessages(batch, which), color)
+		messages := session.AssistantMessages(batch, which)
+		if format == "jsonl" {
+			if err := ui.PrintMessagesJSONL(os.Stdout, messages); err != nil {
+				fmt.Fprintf(os.Stderr, "traces: write output: %v\n", err)
+				return 1
+			}
+			return 0
+		}
+		ui.PrintMessages(os.Stdout, messages, color)
 		return 0
 	}
 	if asJSON {

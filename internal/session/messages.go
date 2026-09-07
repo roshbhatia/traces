@@ -1,6 +1,8 @@
 package session
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"sort"
 	"strings"
 	"time"
@@ -11,8 +13,10 @@ import (
 
 // Message is one user-visible assistant message from an activity source.
 type Message struct {
-	At   time.Time
-	Text string
+	ID      string
+	Session string
+	At      time.Time
+	Text    string
 }
 
 // AssistantMessages selects one exact native session and merges the assistant
@@ -21,8 +25,9 @@ type Message struct {
 func AssistantMessages(batch otlp.Batch, exactSession string) []Message {
 	type candidate struct {
 		Message
-		identity string
-		order    int
+		identity  string
+		canonical string
+		order     int
 	}
 
 	var candidates []candidate
@@ -35,12 +40,23 @@ func AssistantMessages(batch otlp.Batch, exactSession string) []Message {
 			continue
 		}
 		identity := first(record.Attrs["request_id"], record.SpanID)
+		canonical := canonicalMessage(text)
 		candidates = append(candidates, candidate{
-			Message: Message{At: record.At, Text: text}, identity: identity, order: order,
+			Message:  Message{Session: exactSession, At: record.At, Text: text},
+			identity: identity, canonical: canonical, order: order,
 		})
 	}
 	sort.SliceStable(candidates, func(left, right int) bool {
 		if candidates[left].At.Equal(candidates[right].At) {
+			if candidates[left].canonical != candidates[right].canonical {
+				return candidates[left].canonical < candidates[right].canonical
+			}
+			if candidates[left].identity != candidates[right].identity {
+				return candidates[left].identity < candidates[right].identity
+			}
+			if candidates[left].Text != candidates[right].Text {
+				return candidates[left].Text < candidates[right].Text
+			}
 			return candidates[left].order < candidates[right].order
 		}
 		return candidates[left].At.Before(candidates[right].At)
@@ -50,7 +66,7 @@ func AssistantMessages(batch otlp.Batch, exactSession string) []Message {
 	recentText := map[string]time.Time{}
 	messages := make([]Message, 0, len(candidates))
 	for _, one := range candidates {
-		plain := canonicalMessage(one.Text)
+		plain := one.canonical
 		if one.identity != "" {
 			key := one.identity + "\x00" + plain
 			if seenIdentity[key] {
@@ -64,9 +80,19 @@ func AssistantMessages(batch otlp.Batch, exactSession string) []Message {
 			continue
 		}
 		recentText[plain] = one.At
+		one.ID = messageID(exactSession, one.identity, one.At, plain)
 		messages = append(messages, one.Message)
 	}
 	return messages
+}
+
+func messageID(exactSession, nativeIdentity string, at time.Time, canonical string) string {
+	identity := nativeIdentity
+	if identity == "" {
+		identity = at.UTC().Format(time.RFC3339Nano)
+	}
+	digest := sha256.Sum256([]byte(exactSession + "\x00" + identity + "\x00" + canonical))
+	return "msg_" + hex.EncodeToString(digest[:])
 }
 
 func assistantEvent(event string) bool {
@@ -74,5 +100,15 @@ func assistantEvent(event string) bool {
 }
 
 func canonicalMessage(text string) string {
-	return strings.Join(strings.Fields(ansi.Strip(text)), " ")
+	plain := strings.Map(func(value rune) rune {
+		switch {
+		case value == '\n' || value == '\t':
+			return value
+		case value < 0x20 || value == 0x7f || (value >= 0x80 && value <= 0x9f):
+			return -1
+		default:
+			return value
+		}
+	}, ansi.Strip(text))
+	return strings.Join(strings.Fields(plain), " ")
 }

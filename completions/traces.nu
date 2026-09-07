@@ -3,16 +3,17 @@ export extern "traces" [
   --color: string@"__traces_completion_values_0" # Color output
   --config: string # YAML configuration file
   --file: string # Read an OTLP JSON file
-  --json # Print newline-delimited JSON
+  --format: string@"__traces_completion_values_1" # Output view format
+  --json # Print normalized activity as newline-delimited JSON
   --lag: string # Provider overlap window
   --list # List sessions
   --once # Print one trace tree
   --poll: string # Provider poll interval
-  --provider: string@"__traces_completion_values_1" # Read named activity providers
+  --provider: string@"__traces_completion_values_2" # Read named activity providers
   --service: string # Filter by service
   --session: string # Attach by session ID or prefix
   --since: string # Initial provider window
-  --view: string@"__traces_completion_values_2" # Non-interactive view
+  --view: string@"__traces_completion_values_3" # Non-interactive view
   ...args: string@"__traces_completion_none"
 ]
 
@@ -35,13 +36,13 @@ export extern "traces provider list" [
   --config: string # YAML configuration file
   --json # Print JSON
   --names # Print provider names, one per line
-  ...args: string@"__traces_completion_values_3"
+  ...args: string@"__traces_completion_values_4"
 ]
 
 export extern "traces provider validate" [
   --config: string # YAML configuration file
   --json # Print JSON
-  ...args: string@"__traces_completion_values_4"
+  ...args: string@"__traces_completion_values_5"
 ]
 
 def "__traces_completion_none" [] { [] }
@@ -56,24 +57,31 @@ def "__traces_completion_values_0" [context?: string] {
 
 def "__traces_completion_values_1" [context?: string] {
   [
-    (try { run-external "traces" "provider" "complete" ($context | default "") | lines } catch { [] })
+    "text"
+    "jsonl"
   ] | flatten | uniq
 }
 
 def "__traces_completion_values_2" [context?: string] {
+  [
+    (try { run-external "traces" "provider" "complete" ($context | default "") | lines } catch { [] })
+  ] | flatten | uniq
+}
+
+def "__traces_completion_values_3" [context?: string] {
   [
     "tree"
     "output"
   ] | flatten | uniq
 }
 
-def "__traces_completion_values_3" [context?: string] {
+def "__traces_completion_values_4" [context?: string] {
   [
     (try { run-external "traces" "provider" "complete" ($context | default "") | lines } catch { [] })
   ] | flatten | uniq
 }
 
-def "__traces_completion_values_4" [context?: string] {
+def "__traces_completion_values_5" [context?: string] {
   [
     (try { run-external "traces" "provider" "complete" ($context | default "") | lines } catch { [] })
   ] | flatten | uniq

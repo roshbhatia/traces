@@ -2,15 +2,18 @@ __traces_completion_values_0() {
   printf '%s\n' 'auto' 'always' 'never'
 }
 __traces_completion_values_1() {
-  'traces' 'provider' 'complete' "${COMP_LINE:0:COMP_POINT}" 2>/dev/null || true
+  printf '%s\n' 'text' 'jsonl'
 }
 __traces_completion_values_2() {
-  printf '%s\n' 'tree' 'output'
-}
-__traces_completion_values_3() {
   'traces' 'provider' 'complete' "${COMP_LINE:0:COMP_POINT}" 2>/dev/null || true
 }
+__traces_completion_values_3() {
+  printf '%s\n' 'tree' 'output'
+}
 __traces_completion_values_4() {
+  'traces' 'provider' 'complete' "${COMP_LINE:0:COMP_POINT}" 2>/dev/null || true
+}
+__traces_completion_values_5() {
   'traces' 'provider' 'complete' "${COMP_LINE:0:COMP_POINT}" 2>/dev/null || true
 }
 __traces_completion_filter() {
@@ -65,6 +68,8 @@ _traces_complete() {
       ':--config='*) continue ;;
       ':--file') consume_value=1; continue ;;
       ':--file='*) continue ;;
+      ':--format') consume_value=1; continue ;;
+      ':--format='*) continue ;;
       ':--lag') consume_value=1; continue ;;
       ':--lag='*) continue ;;
       ':--poll') consume_value=1; continue ;;
@@ -94,18 +99,20 @@ _traces_complete() {
   done
   case "$context:$previous" in
     ':--color') __traces_completion_filter "$current" < <(__traces_completion_values_0); return ;;
-    ':--provider') __traces_completion_filter "$current" < <(__traces_completion_values_1); return ;;
-    ':--view') __traces_completion_filter "$current" < <(__traces_completion_values_2); return ;;
+    ':--format') __traces_completion_filter "$current" < <(__traces_completion_values_1); return ;;
+    ':--provider') __traces_completion_filter "$current" < <(__traces_completion_values_2); return ;;
+    ':--view') __traces_completion_filter "$current" < <(__traces_completion_values_3); return ;;
   esac
   case "$context:$current" in
     ':--color='*) __traces_completion_filter "${current#*=}" "--color=" < <(__traces_completion_values_0); return ;;
-    ':--provider='*) __traces_completion_filter "${current#*=}" "--provider=" < <(__traces_completion_values_1); return ;;
-    ':--view='*) __traces_completion_filter "${current#*=}" "--view=" < <(__traces_completion_values_2); return ;;
+    ':--format='*) __traces_completion_filter "${current#*=}" "--format=" < <(__traces_completion_values_1); return ;;
+    ':--provider='*) __traces_completion_filter "${current#*=}" "--provider=" < <(__traces_completion_values_2); return ;;
+    ':--view='*) __traces_completion_filter "${current#*=}" "--view=" < <(__traces_completion_values_3); return ;;
   esac
   case "$context" in
     '')
       __traces_completion_filter "$current" < <(
-        printf '%s\n' 'completion' 'generate' 'provider' '--all' '--color' '--config' '--file' '--json' '--lag' '--list' '--once' '--poll' '--provider' '--service' '--session' '--since' '--view'
+        printf '%s\n' 'completion' 'generate' 'provider' '--all' '--color' '--config' '--file' '--format' '--json' '--lag' '--list' '--once' '--poll' '--provider' '--service' '--session' '--since' '--view'
       )
       ;;
     'completion')
@@ -126,13 +133,13 @@ _traces_complete() {
     'provider list')
       __traces_completion_filter "$current" < <(
         printf '%s\n' '--config' '--json' '--names'
-        __traces_completion_values_3
+        __traces_completion_values_4
       )
       ;;
     'provider validate')
       __traces_completion_filter "$current" < <(
         printf '%s\n' '--config' '--json'
-        __traces_completion_values_4
+        __traces_completion_values_5
       )
       ;;
   esac

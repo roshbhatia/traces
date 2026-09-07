@@ -1,8 +1,10 @@
 package ui
 
 import (
+	"encoding/json"
 	"io"
 	"strings"
+	"time"
 	"unicode/utf8"
 
 	"github.com/charmbracelet/x/ansi"
@@ -12,6 +14,17 @@ import (
 // MessageOutputLimit bounds the non-interactive message stream consumed by
 // terminal panes and provider commands.
 const MessageOutputLimit = 64 << 10
+
+const messageRecordVersion = "traces.message/v1"
+
+type messageRecord struct {
+	Version   string `json:"version"`
+	ID        string `json:"id"`
+	Session   string `json:"session"`
+	Timestamp string `json:"timestamp"`
+	Body      string `json:"body"`
+	Truncated bool   `json:"truncated,omitempty"`
+}
 
 // PrintMessages writes the newest assistant messages in chronological order.
 // It adds no metadata, prompts, reasoning, or tool output. A boundary message
@@ -50,6 +63,82 @@ func PrintMessages(out io.Writer, messages []session.Message, color string) {
 	if len(parts) > 0 {
 		_, _ = io.WriteString(out, "\n")
 	}
+}
+
+// PrintMessagesJSONL writes complete, bounded message records for another
+// process. Bodies are plain text: terminal controls never cross the protocol.
+func PrintMessagesJSONL(out io.Writer, messages []session.Message) error {
+	lines := make([][]byte, 0, len(messages))
+	used := 0
+	for index := len(messages) - 1; index >= 0; index-- {
+		message := messages[index]
+		record := messageRecord{
+			Version:   messageRecordVersion,
+			ID:        message.ID,
+			Session:   message.Session,
+			Timestamp: message.At.UTC().Format(time.RFC3339Nano),
+			Body:      strings.TrimSpace(strings.ReplaceAll(messageColor(message.Text, "never"), "\r\n", "\n")),
+		}
+		if record.Body == "" {
+			continue
+		}
+		remaining := MessageOutputLimit - used
+		line, err := json.Marshal(record)
+		if err != nil {
+			return err
+		}
+		if len(line)+1 > remaining {
+			if len(lines) > 0 {
+				break
+			}
+			line, err = fitMessageRecord(record, remaining)
+			if err != nil {
+				return err
+			}
+			if len(line) == 0 {
+				break
+			}
+		}
+		lines = append(lines, line)
+		used += len(line) + 1
+	}
+	for left, right := 0, len(lines)-1; left < right; left, right = left+1, right-1 {
+		lines[left], lines[right] = lines[right], lines[left]
+	}
+	for _, line := range lines {
+		line = append(line, '\n')
+		written, err := out.Write(line)
+		if err != nil {
+			return err
+		}
+		if written != len(line) {
+			return io.ErrShortWrite
+		}
+	}
+	return nil
+}
+
+func fitMessageRecord(record messageRecord, limit int) ([]byte, error) {
+	const marker = "… earlier assistant output omitted …\n"
+	record.Truncated = true
+	runes := []rune(record.Body)
+	low, high := 0, len(runes)
+	var fitted []byte
+	for low <= high {
+		keep := low + (high-low)/2
+		record.Body = marker + strings.TrimSpace(string(runes[len(runes)-keep:]))
+		line, err := json.Marshal(record)
+		if err != nil {
+			return nil, err
+		}
+		if len(line)+1 <= limit {
+			fitted = line
+			low = keep + 1
+		} else {
+			high = keep - 1
+		}
+	}
+	return fitted, nil
 }
 
 func messageColor(text, color string) string {

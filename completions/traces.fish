@@ -7,20 +7,25 @@ function __traces_completion_values_0
 end
 function __traces_completion_values_1
   begin
-    command 'traces' 'provider' 'complete' (commandline -cp) 2>/dev/null; or true
+    printf '%s\n' 'text' 'jsonl'
   end | string match -rv '\t'; or true
 end
 function __traces_completion_values_2
   begin
-    printf '%s\n' 'tree' 'output'
+    command 'traces' 'provider' 'complete' (commandline -cp) 2>/dev/null; or true
   end | string match -rv '\t'; or true
 end
 function __traces_completion_values_3
   begin
-    command 'traces' 'provider' 'complete' (commandline -cp) 2>/dev/null; or true
+    printf '%s\n' 'tree' 'output'
   end | string match -rv '\t'; or true
 end
 function __traces_completion_values_4
+  begin
+    command 'traces' 'provider' 'complete' (commandline -cp) 2>/dev/null; or true
+  end | string match -rv '\t'; or true
+end
+function __traces_completion_values_5
   begin
     command 'traces' 'provider' 'complete' (commandline -cp) 2>/dev/null; or true
   end | string match -rv '\t'; or true
@@ -58,6 +63,11 @@ function __traces_completion_context
         set consume_value 1
         continue
       case ':--file=*'
+        continue
+      case ':--format'
+        set consume_value 1
+        continue
+      case ':--format=*'
         continue
       case ':--lag'
         set consume_value 1
@@ -124,16 +134,17 @@ complete -c traces -n 'test (__traces_completion_context) = ""' -l all -d 'Show 
 complete -c traces -n 'test (__traces_completion_context) = ""' -f -l color -r -a '(__traces_completion_values_0)' -d 'Color output'
 complete -c traces -n 'test (__traces_completion_context) = ""' -l config -r -d 'YAML configuration file'
 complete -c traces -n 'test (__traces_completion_context) = ""' -l file -r -d 'Read an OTLP JSON file'
-complete -c traces -n 'test (__traces_completion_context) = ""' -l json -d 'Print newline-delimited JSON'
+complete -c traces -n 'test (__traces_completion_context) = ""' -f -l format -r -a '(__traces_completion_values_1)' -d 'Output view format'
+complete -c traces -n 'test (__traces_completion_context) = ""' -l json -d 'Print normalized activity as newline-delimited JSON'
 complete -c traces -n 'test (__traces_completion_context) = ""' -l lag -r -d 'Provider overlap window'
 complete -c traces -n 'test (__traces_completion_context) = ""' -l list -d 'List sessions'
 complete -c traces -n 'test (__traces_completion_context) = ""' -l once -d 'Print one trace tree'
 complete -c traces -n 'test (__traces_completion_context) = ""' -l poll -r -d 'Provider poll interval'
-complete -c traces -n 'test (__traces_completion_context) = ""' -f -l provider -r -a '(__traces_completion_values_1)' -d 'Read named activity providers'
+complete -c traces -n 'test (__traces_completion_context) = ""' -f -l provider -r -a '(__traces_completion_values_2)' -d 'Read named activity providers'
 complete -c traces -n 'test (__traces_completion_context) = ""' -l service -r -d 'Filter by service'
 complete -c traces -n 'test (__traces_completion_context) = ""' -l session -r -d 'Attach by session ID or prefix'
 complete -c traces -n 'test (__traces_completion_context) = ""' -l since -r -d 'Initial provider window'
-complete -c traces -n 'test (__traces_completion_context) = ""' -f -l view -r -a '(__traces_completion_values_2)' -d 'Non-interactive view'
+complete -c traces -n 'test (__traces_completion_context) = ""' -f -l view -r -a '(__traces_completion_values_3)' -d 'Non-interactive view'
 complete -c traces -f -n 'test (__traces_completion_context) = ""' -a completion -d 'Generate shell completions'
 complete -c traces -f -n 'test (__traces_completion_context) = ""' -a generate -d 'Generate README command docs and JSON Schema'
 complete -c traces -f -n 'test (__traces_completion_context) = ""' -a provider -d 'Inspect and validate external providers'
@@ -144,7 +155,7 @@ complete -c traces -f -n 'test (__traces_completion_context) = "provider"' -a va
 complete -c traces -n 'test (__traces_completion_context) = "provider list"' -l config -r -d 'YAML configuration file'
 complete -c traces -n 'test (__traces_completion_context) = "provider list"' -l json -d 'Print JSON'
 complete -c traces -n 'test (__traces_completion_context) = "provider list"' -l names -d 'Print provider names, one per line'
-complete -c traces -f -n 'test (__traces_completion_context) = "provider list"' -a '(__traces_completion_values_3)'
+complete -c traces -f -n 'test (__traces_completion_context) = "provider list"' -a '(__traces_completion_values_4)'
 complete -c traces -n 'test (__traces_completion_context) = "provider validate"' -l config -r -d 'YAML configuration file'
 complete -c traces -n 'test (__traces_completion_context) = "provider validate"' -l json -d 'Print JSON'
-complete -c traces -f -n 'test (__traces_completion_context) = "provider validate"' -a '(__traces_completion_values_4)'
+complete -c traces -f -n 'test (__traces_completion_context) = "provider validate"' -a '(__traces_completion_values_5)'

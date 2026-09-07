@@ -28,6 +28,11 @@ interface.
 - **WHEN** a user supplies `--view output` and an exact session identity
 - **THEN** Traces MUST print a bounded chronological stream of visible assistant text and terminate
 
+#### Scenario: Structured assistant output is requested
+
+- **WHEN** a user supplies `--view output --format jsonl` and an exact session identity
+- **THEN** Traces MUST emit bounded `traces.message/v1` records and terminate
+
 ### Requirement: Assistant output composition
 
 Output view MUST select an exact session. It MUST merge and deduplicate
@@ -35,6 +40,13 @@ normalized assistant records from all selected providers. It MUST omit user
 prompts, private reasoning, tool calls, and tool results. Plain output MUST
 remove terminal control sequences. Colored output MUST retain only SGR palette
 sequences.
+
+Structured output MUST preserve the human output selection, merge,
+deduplication, and ordering rules. Each record MUST include a stable identity,
+the exact native session identity, an RFC3339Nano timestamp, and the visible
+assistant body. The body MUST be plain text without terminal controls. The
+stream MUST contain only complete JSON records. An individually truncated
+record MUST identify itself as truncated.
 
 #### Scenario: Providers repeat one native reply
 
@@ -45,6 +57,11 @@ sequences.
 
 - **WHEN** an assistant record contains an OSC or non-SGR escape sequence
 - **THEN** output view MUST omit that sequence from colored and plain output
+
+#### Scenario: Provider order changes
+
+- **WHEN** the same normalized assistant records arrive in a different provider order
+- **THEN** structured output MUST retain the same message identities and chronological order
 
 ### Requirement: Machine-readable output
 

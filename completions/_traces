@@ -6,22 +6,27 @@ __traces_completion_values_0() {
 }
 __traces_completion_values_1() {
   local -a values
-  values=()
-  values+=("${(@f)$('traces' 'provider' 'complete' "${BUFFER[1,CURSOR]}" 2>/dev/null)}")
+  values=( 'text' 'jsonl')
   compadd -a values
 }
 __traces_completion_values_2() {
   local -a values
-  values=( 'tree' 'output')
+  values=()
+  values+=("${(@f)$('traces' 'provider' 'complete' "${BUFFER[1,CURSOR]}" 2>/dev/null)}")
   compadd -a values
 }
 __traces_completion_values_3() {
+  local -a values
+  values=( 'tree' 'output')
+  compadd -a values
+}
+__traces_completion_values_4() {
   local -a values
   values=()
   values+=("${(@f)$('traces' 'provider' 'complete' "${BUFFER[1,CURSOR]}" 2>/dev/null)}")
   compadd -a values
 }
-__traces_completion_values_4() {
+__traces_completion_values_5() {
   local -a values
   values=()
   values+=("${(@f)$('traces' 'provider' 'complete' "${BUFFER[1,CURSOR]}" 2>/dev/null)}")
@@ -52,6 +57,8 @@ _traces() {
       ':--config='*) continue ;;
       ':--file') consume_value=1; continue ;;
       ':--file='*) continue ;;
+      ':--format') consume_value=1; continue ;;
+      ':--format='*) continue ;;
       ':--lag') consume_value=1; continue ;;
       ':--lag='*) continue ;;
       ':--poll') consume_value=1; continue ;;
@@ -86,16 +93,17 @@ _traces() {
         '--color[Color output]:value:__traces_completion_values_0' \
         '--config[YAML configuration file]:value:' \
         '--file[Read an OTLP JSON file]:value:' \
-        '--json[Print newline-delimited JSON]' \
+        '--format[Output view format]:value:__traces_completion_values_1' \
+        '--json[Print normalized activity as newline-delimited JSON]' \
         '--lag[Provider overlap window]:value:' \
         '--list[List sessions]' \
         '--once[Print one trace tree]' \
         '--poll[Provider poll interval]:value:' \
-        '--provider[Read named activity providers]:value:__traces_completion_values_1' \
+        '--provider[Read named activity providers]:value:__traces_completion_values_2' \
         '--service[Filter by service]:value:' \
         '--session[Attach by session ID or prefix]:value:' \
         '--since[Initial provider window]:value:' \
-        '--view[Non-interactive view]:value:__traces_completion_values_2' \
+        '--view[Non-interactive view]:value:__traces_completion_values_3' \
         '1:command:(completion generate provider)'
 
       ;;
@@ -119,14 +127,14 @@ _traces() {
         '--config[YAML configuration file]:value:' \
         '--json[Print JSON]' \
         '--names[Print provider names, one per line]' \
-        '*:argument:__traces_completion_values_3'
+        '*:argument:__traces_completion_values_4'
 
       ;;
     'provider validate')
       _arguments \
         '--config[YAML configuration file]:value:' \
         '--json[Print JSON]' \
-        '*:argument:__traces_completion_values_4'
+        '*:argument:__traces_completion_values_5'
 
       ;;
   esac
