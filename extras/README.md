@@ -4,6 +4,7 @@ Each provider directory owns its manifest, executable or script, and Nix
 package definition. Harness readers emit the generic Traces newline-delimited
 JSON protocol.
 
+- `traces-provider-antigravity`
 - `traces-provider-claude`
 - `traces-provider-codex`
 - `traces-provider-desktop`

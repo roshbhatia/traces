@@ -76,6 +76,7 @@ another file. Nested environment names override YAML, such as
 # yaml-language-server: $schema=https://raw.githubusercontent.com/roshbhatia/traces/main/schema/traces.schema.json
 color: auto
 sources:
+  antigravity: [antigravity]
   claude-code: [claude, gate]
   codex: [codex]
   codex_cli_rs: [codex]
