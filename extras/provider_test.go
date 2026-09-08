@@ -12,6 +12,7 @@ func TestReleaseProvidersDeclareExternalCommands(t *testing.T) {
 		provider string
 		commands []string
 	}{
+		{provider: "devin", commands: []string{"sqlite3"}},
 		{provider: "git", commands: []string{"git"}},
 		{provider: "opencode", commands: []string{"opencode"}},
 	}
