@@ -1,0 +1,24 @@
+# yaml-language-server: $schema=../../schema/provider.schema.json
+version: provider/v1
+name: gate
+description: Read gate hook decisions as activity
+command: [traces-provider-gate]
+defaults:
+  timeout: 30s
+  priority: 100
+actions:
+  provider.validate:
+    description: Check the gate decision log inside the provider runtime
+    argv: [--action, validate]
+  activity.read:
+    description: Read hook decisions inside a time, session, and directory window
+    argv:
+      - --since
+      - "{{ .Since }}"
+      - "{{ if .ExactSession }}--exact-session{{ else }}--session{{ end }}"
+      - "{{ .Session }}"
+      - --directory
+      - "{{ .Directory }}"
+    env:
+      TRACES_DIRECTORY: "{{ .Directory }}"
+      TRACES_SESSION: "{{ .Session }}"
