@@ -1,0 +1,30 @@
+# yaml-language-server: $schema=../../schema/provider.schema.json
+version: provider/v1
+name: antigravity
+description: Read Antigravity CLI trajectory activity and directory sessions
+command: [traces-provider-antigravity]
+defaults:
+  timeout: 2m
+  priority: 100
+actions:
+  provider.validate:
+    description: Check the trajectory state directory inside the provider runtime
+    argv: [--action, validate]
+  activity.read:
+    description: Read activity inside a time and session window
+    argv:
+      - --since
+      - "{{ .Since }}"
+      - "{{ if .ExactSession }}--exact-session{{ else }}--session{{ end }}"
+      - "{{ .Session }}"
+      - --directory
+      - "{{ .Directory }}"
+    env:
+      TRACES_DIRECTORY: "{{ .Directory }}"
+      TRACES_SESSION: "{{ .Session }}"
+  session.current:
+    description: Read the conversation Antigravity last opened in a workspace
+    argv: [--action, current, --directory, "{{ .Directory }}"]
+  session.discover:
+    description: Find recent Antigravity conversations bound to a workspace directory
+    argv: [--action, discover, --directory, "{{ .Directory }}"]
