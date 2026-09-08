@@ -1,131 +1,168 @@
 {
-  "$defs": {
-    "Action": {
-      "additionalProperties": false,
-      "properties": {
-        "argv": {
-          "items": {
-            "type": "string"
-          },
-          "type": "array"
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "$defs": {
+        "Action": {
+            "type": "object",
+            "description": "Action describes one capability and its action-specific arguments and\nenvironment. Each argv and env value is a template the caller renders.",
+            "additionalProperties": false,
+            "properties": {
+                "argv": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "description": {
+                    "type": "string",
+                    "minLength": 1
+                },
+                "env": {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "patternProperties": {
+                        "^[A-Za-z_][A-Za-z0-9_]*$": {
+                            "type": "string"
+                        }
+                    }
+                }
+            },
+            "required": [
+                "description"
+            ]
+        },
+        "Defaults": {
+            "type": "object",
+            "description": "Defaults carries provider-wide execution policy. model is what a plain\nrequest runs; light is the cheap model for bulk work.",
+            "additionalProperties": false,
+            "properties": {
+                "light": {
+                    "$ref": "#/$defs/ModelID"
+                },
+                "model": {
+                    "$ref": "#/$defs/ModelID"
+                },
+                "priority": {
+                    "type": "integer"
+                },
+                "timeout": {
+                    "$ref": "#/$defs/Duration"
+                }
+            }
+        },
+        "Duration": {
+            "type": "string",
+            "description": "Duration is the one duration grammar for the contract. It is a strict\nsubset of Go's time.ParseDuration: one or more unsigned decimal numbers,\neach followed by a unit. No sign, no bare number, no leading or trailing\ndot, no whitespace.",
+            "pattern": "^([0-9]+(\\.[0-9]+)?(ns|us|µs|ms|s|m|h))+$"
+        },
+        "EnvName": {
+            "type": "string",
+            "description": "EnvName is a POSIX environment variable name.",
+            "pattern": "^[A-Za-z_][A-Za-z0-9_]*$"
+        },
+        "ModelID": {
+            "description": "ModelID is an opaque model identifier. The role words that a caller uses to\nselect a model are not valid identifiers.",
+            "allOf": [
+                {
+                    "not": {
+                        "const": "light"
+                    }
+                },
+                {
+                    "type": "string",
+                    "minLength": 1,
+                    "not": {
+                        "const": "default"
+                    }
+                }
+            ]
+        },
+        "Name": {
+            "type": "string",
+            "description": "Name is the grammar for provider names, action names, and kinds.",
+            "pattern": "^[a-z][a-z0-9._-]*$"
+        },
+        "Requirements": {
+            "type": "object",
+            "description": "Requirements declares dependencies which must exist before invocation.",
+            "additionalProperties": false,
+            "properties": {
+                "commands": {
+                    "type": "array",
+                    "items": {
+                        "type": "string",
+                        "minLength": 1
+                    }
+                },
+                "environment": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/$defs/EnvName"
+                    }
+                },
+                "paths": {
+                    "type": "array",
+                    "items": {
+                        "type": "string",
+                        "minLength": 1
+                    }
+                }
+            }
+        }
+    },
+    "type": "object",
+    "description": "Manifest describes one provider and the actions it implements.",
+    "additionalProperties": false,
+    "properties": {
+        "actions": {
+            "type": "object",
+            "additionalProperties": false,
+            "patternProperties": {
+                "^[a-z][a-z0-9._-]*$": {
+                    "$ref": "#/$defs/Action"
+                }
+            }
+        },
+        "command": {
+            "type": "array",
+            "description": "command is the executable and its fixed leading arguments. It always\nruns directly; no shell is inserted.",
+            "items": {
+                "type": "string",
+                "minLength": 1
+            },
+            "prefixItems": [
+                {
+                    "type": "string",
+                    "minLength": 1
+                }
+            ],
+            "minItems": 1
+        },
+        "defaults": {
+            "$ref": "#/$defs/Defaults"
         },
         "description": {
-          "type": "string"
+            "type": "string",
+            "minLength": 1
         },
-        "env": {
-          "additionalProperties": {
-            "type": "string"
-          },
-          "type": "object"
+        "kind": {
+            "description": "kind is an opaque classification. A consuming tool may narrow it to its\nown closed set by unification.",
+            "$ref": "#/$defs/Name"
+        },
+        "name": {
+            "$ref": "#/$defs/Name"
+        },
+        "requires": {
+            "$ref": "#/$defs/Requirements"
+        },
+        "version": {
+            "const": "provider/v1"
         }
-      },
-      "required": [
-        "description"
-      ],
-      "type": "object"
     },
-    "Defaults": {
-      "additionalProperties": false,
-      "properties": {
-        "light": {
-          "type": "string"
-        },
-        "model": {
-          "type": "string"
-        },
-        "priority": {
-          "type": "integer"
-        },
-        "timeout": {
-          "$ref": "#/$defs/Duration"
-        }
-      },
-      "type": "object"
-    },
-    "Duration": {
-      "description": "Go duration such as 500ms, 10s, or 2m",
-      "pattern": "^[0-9]+(ns|us|µs|ms|s|m|h)$",
-      "type": "string"
-    },
-    "Requirements": {
-      "additionalProperties": false,
-      "properties": {
-        "commands": {
-          "items": {
-            "type": "string"
-          },
-          "type": "array"
-        },
-        "environment": {
-          "items": {
-            "type": "string"
-          },
-          "type": "array"
-        },
-        "paths": {
-          "items": {
-            "type": "string"
-          },
-          "type": "array"
-        }
-      },
-      "type": "object"
-    }
-  },
-  "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "additionalProperties": false,
-  "properties": {
-    "actions": {
-      "additionalProperties": {
-        "$ref": "#/$defs/Action"
-      },
-      "propertyNames": {
-        "enum": [
-          "activity.read",
-          "clipboard.write",
-          "diff.render",
-          "document.open",
-          "provider.validate",
-          "session.current",
-          "session.discover"
-        ]
-      },
-      "type": "object"
-    },
-    "command": {
-      "items": {
-        "type": "string"
-      },
-      "minItems": 1,
-      "type": "array"
-    },
-    "defaults": {
-      "$ref": "#/$defs/Defaults"
-    },
-    "description": {
-      "type": "string"
-    },
-    "name": {
-      "pattern": "^[a-z][a-z0-9._-]*$",
-      "type": "string"
-    },
-    "requires": {
-      "$ref": "#/$defs/Requirements"
-    },
-    "version": {
-      "enum": [
-        "provider/v1"
-      ],
-      "type": "string"
-    }
-  },
-  "required": [
-    "version",
-    "name",
-    "description",
-    "command",
-    "actions"
-  ],
-  "title": "External provider manifest",
-  "type": "object"
+    "required": [
+        "actions",
+        "command",
+        "description",
+        "name",
+        "version"
+    ]
 }

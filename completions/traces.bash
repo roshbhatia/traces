@@ -112,7 +112,7 @@ _traces_complete() {
   case "$context" in
     '')
       __traces_completion_filter "$current" < <(
-        printf '%s\n' 'completion' 'generate' 'provider' '--all' '--color' '--config' '--file' '--format' '--json' '--lag' '--list' '--once' '--poll' '--provider' '--service' '--session' '--since' '--view'
+        printf '%s\n' 'completion' 'generate' 'provider' '--all' '--color' '--config' '--file' '--format' '--json' '--lag' '--list' '--once' '--poll' '--provider' '--service' '--session' '--since' '--version' '--view'
       )
       ;;
     'completion')

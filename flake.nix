@@ -4,6 +4,13 @@
   inputs = {
     nixpkgs.url = "github:NixOS/nixpkgs/nixpkgs-unstable";
     systems.url = "github:nix-systems/default";
+    # The canonical provider/v1 contract. schema/narrow.cue adds the Traces
+    # action vocabulary on top of it; schema/provider.schema.json must stay
+    # byte-identical to its export.
+    provider-spec = {
+      url = "github:roshbhatia/provider-spec/v1.0.0";
+      flake = false;
+    };
   };
 
   outputs =
@@ -11,6 +18,7 @@
       self,
       nixpkgs,
       systems,
+      provider-spec,
       ...
     }:
     let
@@ -68,7 +76,7 @@
               pname = "traces-provider-${name}";
               inherit version;
               src = ./.;
-              vendorHash = "sha256-O+xxa2Hi8Xjc+uEmrQ0QgxqK+oIqSxxVkPsmNYTOUpg=";
+              vendorHash = "sha256-I7bNicSm03+uhEB5somhsts7Zhh7s5b0EHJdK6Eq1iU=";
               subPackages = [ "./extras/${name}" ];
               nativeBuildInputs = lib.optionals (runtimeInputs != [ ]) [ pkgs.makeWrapper ];
               doCheck = false;
@@ -94,8 +102,9 @@
             pname = "traces";
             inherit version;
             src = ./.;
-            vendorHash = "sha256-O+xxa2Hi8Xjc+uEmrQ0QgxqK+oIqSxxVkPsmNYTOUpg=";
+            vendorHash = "sha256-I7bNicSm03+uhEB5somhsts7Zhh7s5b0EHJdK6Eq1iU=";
             subPackages = [ "." ];
+            ldflags = [ "-X main.version=${version}" ];
             nativeBuildInputs = [
               pkgs.cue
               pkgs.gitMinimal
@@ -107,11 +116,11 @@
               runHook preCheck
               go test -race ./...
               go run . generate --check
-              cue vet schema/provider.cue schema/check.cue
+              cue vet ${provider-spec}/provider.cue schema/narrow.cue schema/check.cue
               for manifest in extras/*/provider.yaml; do
-                cue vet schema/provider.cue "$manifest" -d '#Manifest'
+                cue vet -d '#Manifest' ${provider-spec}/provider.cue schema/narrow.cue "$manifest"
               done
-              if cue vet schema/provider.cue schema/fixtures/unsupported-action.yaml -d '#Manifest'; then
+              if cue vet -d '#Manifest' ${provider-spec}/provider.cue schema/narrow.cue schema/fixtures/unsupported-action.yaml; then
                 echo "unsupported provider action passed CUE validation" >&2
                 exit 1
               fi
@@ -299,15 +308,32 @@
                 ${pkgs.bash}/bin/bash ./hack/check-provider-neutral.sh
                 touch "$out"
               '';
-          schema-actions =
-            pkgs.runCommand "traces-provider-schema-actions" { nativeBuildInputs = [ pkgs.cue ]; }
+          # The committed schema is the pinned spec export, every manifest
+          # satisfies the spec plus schema/narrow.cue, and the binary reports
+          # the spec version the flake pins.
+          provider-spec-contract =
+            pkgs.runCommand "traces-provider-spec-contract"
+              {
+                nativeBuildInputs = [
+                  pkgs.cue
+                  pkgs.diffutils
+                ];
+              }
               ''
                 cd ${./.}
-                cue vet schema/provider.cue schema/check.cue
-                if cue vet schema/provider.cue schema/fixtures/unsupported-action.yaml -d '#Manifest'; then
-                  echo "unsupported provider action passed CUE validation" >&2
-                  exit 1
-                fi
+                export HOME="$TMPDIR"
+                diff -u ${provider-spec}/schema/provider.schema.json schema/provider.schema.json
+                cue vet ${provider-spec}/provider.cue schema/narrow.cue schema/check.cue
+                for manifest in extras/*/provider.yaml; do
+                  cue vet -d '#Manifest' ${provider-spec}/provider.cue schema/narrow.cue "$manifest"
+                done
+                for fixture in schema/fixtures/*.yaml; do
+                  if cue vet -d '#Manifest' ${provider-spec}/provider.cue schema/narrow.cue "$fixture" 2>/dev/null; then
+                    echo "reject expected: $fixture" >&2
+                    exit 1
+                  fi
+                done
+                ${traces}/bin/traces --version | grep --fixed-strings --line-regexp "provider/v1 spec $(cat ${provider-spec}/VERSION)"
                 touch "$out"
               '';
           closures = pkgs.runCommand "traces-closure-boundaries" { nativeBuildInputs = [ pkgs.gnugrep ]; } ''
@@ -355,6 +381,7 @@
             ];
             shellHook = ''
               export GOTOOLCHAIN=local
+              export PROVIDER_SPEC=${provider-spec}
             '';
           };
         }

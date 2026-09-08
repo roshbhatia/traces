@@ -28,6 +28,7 @@ import (
 
 	"github.com/roshbhatia/go-utils/completion"
 	"github.com/roshbhatia/go-utils/paths"
+	providerlib "github.com/roshbhatia/go-utils/provider"
 	"github.com/roshbhatia/go-utils/terminal"
 	"github.com/roshbhatia/traces/internal/otlp"
 	"github.com/roshbhatia/traces/internal/session"
@@ -35,7 +36,21 @@ import (
 	"github.com/roshbhatia/traces/internal/ui"
 )
 
+// version is set by the release build; a source build reports dev.
+var version = "dev"
+
+// specVersion is the provider contract the linked go-utils validates against.
+// A fleet check reads this one line from every tool.
+func specVersion() string {
+	return providerlib.Version + " spec " + providerlib.SpecVersion
+}
+
 func main() {
+	if len(os.Args) > 1 && (os.Args[1] == "--version" || os.Args[1] == "-version") {
+		fmt.Println(version)
+		fmt.Println(specVersion())
+		return
+	}
 	if len(os.Args) > 1 && os.Args[1] == "completion" {
 		generateCompletion(os.Args[2:])
 		return
@@ -211,6 +226,7 @@ func commandMetadata() completion.Command {
 		Description: "Inspect agent activity as a trace tree",
 		Flags: []completion.Flag{
 			{Name: "all", Description: "Show every local run"},
+			{Name: "version", Description: "Print the build and provider spec versions"},
 			{Name: "color", Description: "Color output", Value: true, Values: []string{"auto", "always", "never"}},
 			{Name: "config", Description: "YAML configuration file", Value: true},
 			{Name: "file", Description: "Read an OTLP JSON file", Value: true},
@@ -389,6 +405,7 @@ func runProvider(args []string) {
 		data, _ := json.Marshal(results)
 		fmt.Println(string(data))
 	} else {
+		fmt.Println(specVersion())
 		for _, result := range results {
 			mark := "+"
 			if result.Status != "ok" {

@@ -188,6 +188,7 @@ Inspect agent activity as a trace tree
 | Option | Description |
 | --- | --- |
 | `--all` | Show every local run |
+| `--version` | Print the build and provider spec versions |
 | `--color` `<value>` | Color output |
 | `--config` `<value>` | YAML configuration file |
 | `--file` `<value>` | Read an OTLP JSON file |

@@ -16,9 +16,27 @@
         "type": "github"
       }
     },
+    "provider-spec": {
+      "flake": false,
+      "locked": {
+        "lastModified": 1788907976,
+        "narHash": "sha256-o0eerxlZdatjXkv1DB5WtXD15u0e00I3R9gtxIjnj5M=",
+        "owner": "roshbhatia",
+        "repo": "provider-spec",
+        "rev": "7a141d5bce35a4f65cdc08b10e575932b45d2707",
+        "type": "github"
+      },
+      "original": {
+        "owner": "roshbhatia",
+        "ref": "v1.0.0",
+        "repo": "provider-spec",
+        "type": "github"
+      }
+    },
     "root": {
       "inputs": {
         "nixpkgs": "nixpkgs",
+        "provider-spec": "provider-spec",
         "systems": "systems"
       }
     },

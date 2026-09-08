@@ -13,6 +13,7 @@ export extern "traces" [
   --service: string # Filter by service
   --session: string # Attach by session ID or prefix
   --since: string # Initial provider window
+  --version # Print the build and provider spec versions
   --view: string@"__traces_completion_values_3" # Non-interactive view
   ...args: string@"__traces_completion_none"
 ]

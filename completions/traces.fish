@@ -144,6 +144,7 @@ complete -c traces -n 'test (__traces_completion_context) = ""' -f -l provider -
 complete -c traces -n 'test (__traces_completion_context) = ""' -l service -r -d 'Filter by service'
 complete -c traces -n 'test (__traces_completion_context) = ""' -l session -r -d 'Attach by session ID or prefix'
 complete -c traces -n 'test (__traces_completion_context) = ""' -l since -r -d 'Initial provider window'
+complete -c traces -n 'test (__traces_completion_context) = ""' -l version -d 'Print the build and provider spec versions'
 complete -c traces -n 'test (__traces_completion_context) = ""' -f -l view -r -a '(__traces_completion_values_3)' -d 'Non-interactive view'
 complete -c traces -f -n 'test (__traces_completion_context) = ""' -a completion -d 'Generate shell completions'
 complete -c traces -f -n 'test (__traces_completion_context) = ""' -a generate -d 'Generate README command docs and JSON Schema'
