@@ -23,6 +23,9 @@ import (
 	"github.com/charmbracelet/lipgloss"
 	"github.com/charmbracelet/x/ansi"
 	"github.com/muesli/termenv"
+	"github.com/roshbhatia/go-utils/cell"
+	"github.com/roshbhatia/go-utils/panes"
+	"github.com/roshbhatia/go-utils/terminal"
 
 	"github.com/roshbhatia/traces/internal/otlp"
 	"github.com/roshbhatia/traces/internal/session"
@@ -776,11 +779,7 @@ func (m Model) detailRows() int {
 // A terminal answering an OSC colour query writes the reply to stdin, and Bubble
 // Tea v1 parses it as keys. Drop the fragments, or one reply clears the leader
 // and leaves "no binding" in the footer.
-func isTerminalReply(k string) bool {
-	return k == "alt+]" || k == "alt+\\" ||
-		strings.HasPrefix(k, "]10;") || strings.HasPrefix(k, "]11;") ||
-		strings.HasPrefix(k, "10;rgb:") || strings.HasPrefix(k, "11;rgb:")
-}
+var isTerminalReply = terminal.IsControlReply
 
 func (m Model) key(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	k := msg.String()
@@ -1470,52 +1469,18 @@ func (m Model) marked() []int {
 	return nil
 }
 
-// fit pads or truncates to an exact cell width. ansi.Truncate is the only safe
-// cut here: it copies escape bytes through even past the cutoff, so a style
-// never bleeds into the next column.
-func fit(s string, width int) string {
-	if width < 1 {
-		return ""
-	}
-	s = ansi.Truncate(s, width, gl.ell)
-	if w := ansi.StringWidth(s); w < width {
-		s += strings.Repeat(" ", width-w)
-	}
-	return s
+// These names keep the dense layout call sites readable while go-utils owns
+// ANSI-safe clipping and terminal-cell measurement.
+func fit(value string, width int) string {
+	return cell.Fit(value, width, gl.ell)
 }
 
-func rightFit(s string, width int) string {
-	if width < 1 {
-		return ""
-	}
-	s = ansi.Truncate(s, width, gl.ell)
-	if w := ansi.StringWidth(s); w < width {
-		s = strings.Repeat(" ", width-w) + s
-	}
-	return s
+func rightFit(value string, width int) string {
+	return cell.RightFit(value, width, gl.ell)
 }
 
-// clipWord cuts to width on a word boundary, and only cuts mid word when the
-// boundary would throw away more than two fifths of the budget. ansi.Wordwrap
-// wraps rather than clips, so the single line case is hand rolled.
-func clipWord(s string, width int) string {
-	if width < 1 {
-		return ""
-	}
-	if ansi.StringWidth(s) <= width {
-		return s
-	}
-	budget := width - ansi.StringWidth(gl.ell)
-	if budget < 1 {
-		return ansi.Truncate(s, width, "")
-	}
-	head := ansi.Truncate(s, budget, "")
-	if cut := strings.LastIndexAny(head, " \t"); cut > 0 {
-		if ansi.StringWidth(head[:cut])*5 >= budget*3 {
-			head = head[:cut]
-		}
-	}
-	return strings.TrimRight(head, " ") + gl.ell
+func clipWord(value string, width int) string {
+	return cell.ClipWord(value, width, gl.ell)
 }
 
 // columns splits the row between the label, the preview and the numbers. A
@@ -2191,7 +2156,7 @@ func (m Model) moveTab(by int) Model {
 		m.tab = ""
 		return m
 	}
-	at := ((m.tabAt()+by)%len(tabs) + len(tabs)) % len(tabs)
+	at := panes.Cycle(m.tabAt(), by, len(tabs))
 	m.tab = tabs[at].name
 	return m
 }
@@ -2744,6 +2709,25 @@ func (m Model) tabCols() []int {
 	return cols
 }
 
+func (m Model) tabRegions() []panes.Region {
+	left := m.paneLeft() + 1
+	columns := m.tabCols()
+	tabs := m.tabsFor()
+	regions := make([]panes.Region, 0, len(tabs))
+	for index, tab := range tabs {
+		regions = append(regions, panes.Region{
+			ID: tab.name,
+			Rect: panes.Rect{
+				X:      left + columns[index],
+				Y:      m.paneTop(),
+				Width:  lipgloss.Width(tab.name) + 3,
+				Height: 1,
+			},
+		})
+	}
+	return regions
+}
+
 // tabTop draws the tab row into the pane's own top border, the way the charm
 // tabs example seats a tab on the window frame. It was a separate line inside
 // the box, which cost one row of content and printed the word "inspector" over
@@ -2975,11 +2959,14 @@ func helpLines(width int) []string {
 	descriptionWidth := max(1, width-keyWidth)
 	lines := []string{}
 	for _, binding := range helpBindings() {
-		wrapped := wrapTo(binding.description, descriptionWidth)
+		wrapped := wrapTo(binding.Description, descriptionWidth)
 		for i, line := range wrapped {
 			key := ""
 			if i == 0 {
-				key = binding.keys
+				key = binding.Display
+				if key == "" {
+					key = strings.Join(binding.Keys, " / ")
+				}
 			}
 			lines = append(lines, accent.Render(fit(key, keyWidth))+plain.Render(line))
 		}
@@ -3201,16 +3188,15 @@ func (m Model) onWedge(vi, x int) bool {
 // inPane excludes the timeline, spacing rows, and footer. A wheel event then
 // reaches the pane under the pointer.
 func (m Model) inPane(msg tea.MouseMsg) bool {
-	insideRows := msg.Y >= m.paneTop() && msg.Y < m.paneBottom()
+	rectangle := panes.Rect{
+		X:      m.paneLeft(),
+		Y:      m.paneTop(),
+		Width:  m.detailWidth(),
+		Height: m.paneBottom() - m.paneTop(),
+	}
 	switch m.placeAt() {
-	case placeBottom:
-		return insideRows
-	case placeTop:
-		return insideRows
-	case placeLeft:
-		return insideRows && msg.X < m.detailCols()
-	case placeRight:
-		return insideRows && msg.X >= m.treeWidth()
+	case placeBottom, placeTop, placeLeft, placeRight:
+		return rectangle.Contains(msg.X, msg.Y)
 	}
 	return false
 }
@@ -3255,12 +3241,8 @@ func (m Model) mouse(msg tea.MouseMsg) (tea.Model, tea.Cmd) {
 		// A click on the tab bar picks that tab. The bar is the pane's first
 		// inner row, one below the inspector top border.
 		if msg.Action == tea.MouseActionPress && msg.Button == tea.MouseButtonLeft && msg.Y == m.paneTop() {
-			x := msg.X - m.paneLeft() - 1
-			tabs := m.tabsFor()
-			for i, col := range m.tabCols() {
-				if x >= col {
-					m.tab = tabs[i].name
-				}
+			if hit, ok := panes.HitTest(m.tabRegions(), msg.X, msg.Y); ok {
+				m.tab = hit.Region.ID
 			}
 			return m.clamp(), nil
 		}

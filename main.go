@@ -28,11 +28,11 @@ import (
 
 	"github.com/roshbhatia/go-utils/completion"
 	"github.com/roshbhatia/go-utils/paths"
+	"github.com/roshbhatia/go-utils/terminal"
 	"github.com/roshbhatia/traces/internal/otlp"
 	"github.com/roshbhatia/traces/internal/session"
 	"github.com/roshbhatia/traces/internal/source"
 	"github.com/roshbhatia/traces/internal/ui"
-	"golang.org/x/term"
 )
 
 func main() {
@@ -179,7 +179,7 @@ func main() {
 }
 
 var stdoutIsTerminal = func() bool {
-	return term.IsTerminal(int(os.Stdout.Fd()))
+	return terminal.IsTTY(os.Stdout)
 }
 
 func providerColor(mode string) string {

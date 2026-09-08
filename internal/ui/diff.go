@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/roshbhatia/go-utils/diffview"
+	"github.com/roshbhatia/go-utils/xdg"
 	"github.com/roshbhatia/traces/internal/source"
 )
 
@@ -209,7 +210,7 @@ func diffCachePath(key string) string {
 }
 
 func diffCacheDirectory() string {
-	root, err := os.UserCacheDir()
+	root, err := xdg.CacheHome()
 	if err != nil {
 		return ""
 	}

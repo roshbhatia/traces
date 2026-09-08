@@ -2,13 +2,13 @@ package source
 
 import (
 	"maps"
-	"os"
 	"path/filepath"
 	"slices"
 	"sort"
 	"strings"
 
 	sharedconfig "github.com/roshbhatia/go-utils/config"
+	"github.com/roshbhatia/go-utils/xdg"
 )
 
 // Diff configures an optional two-file rendering provider.
@@ -48,14 +48,11 @@ func Default() Settings {
 }
 
 func defaultProviderDirectory() string {
-	if root := strings.TrimSpace(os.Getenv("XDG_CONFIG_HOME")); filepath.IsAbs(root) {
-		return filepath.Join(root, "traces", "providers")
-	}
-	home, err := os.UserHomeDir()
+	root, err := xdg.ConfigHome()
 	if err != nil {
 		return filepath.Join(".config", "traces", "providers")
 	}
-	return filepath.Join(home, ".config", "traces", "providers")
+	return filepath.Join(root, "traces", "providers")
 }
 
 // LoadSettings applies YAML and TRACES_* environment overrides.
