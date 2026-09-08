@@ -78,6 +78,7 @@ color: auto
 sources:
   antigravity: [antigravity]
   claude-code: [claude, gate]
+  cursor: [cursor]
   codex: [codex]
   codex_cli_rs: [codex]
   opencode: [opencode]

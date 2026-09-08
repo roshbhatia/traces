@@ -7,6 +7,7 @@ JSON protocol.
 - `traces-provider-antigravity`
 - `traces-provider-claude`
 - `traces-provider-codex`
+- `traces-provider-cursor`
 - `traces-provider-desktop`
 - `traces-provider-gate`
 - `traces-provider-git`
