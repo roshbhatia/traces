@@ -27,6 +27,12 @@
     "Defaults": {
       "additionalProperties": false,
       "properties": {
+        "light": {
+          "type": "string"
+        },
+        "model": {
+          "type": "string"
+        },
         "priority": {
           "type": "integer"
         },

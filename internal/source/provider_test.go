@@ -64,6 +64,17 @@ func TestCoreDefaultsHaveNoHarnessProviders(t *testing.T) {
 	}
 }
 
+func TestDefaultProviderDirectoryIgnoresRelativeXDGRoot(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("XDG_CONFIG_HOME", "relative-config")
+
+	want := filepath.Join(home, ".config", "traces", "providers")
+	if got := Default().Providers.Directory; got != want {
+		t.Fatalf("provider directory = %q, want %q", got, want)
+	}
+}
+
 func TestServiceFilterSkipsOtherHarnesses(t *testing.T) {
 	table := map[string][]string{
 		"runner-a": {"shared", "local"},

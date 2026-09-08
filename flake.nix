@@ -50,7 +50,7 @@
         let
           pkgs = nixpkgs.legacyPackages.${system};
           inherit (pkgs) lib;
-          version = "0.7.0";
+          version = "0.7.1";
           providerMeta = name: {
             description = "Composable agent trace provider: ${name}";
             homepage = "https://github.com/roshbhatia/traces";
@@ -68,7 +68,7 @@
               pname = "traces-provider-${name}";
               inherit version;
               src = ./.;
-              vendorHash = "sha256-YLF2PPMI2gewd2rH90SC7ZNdOdGVG0/Qx1ILg2WxdAI=";
+              vendorHash = "sha256-rRIVJlsnAAmFwXTLzz8KO19V562fz3ZIVUUtpJMHSMQ=";
               subPackages = [ "./extras/${name}" ];
               nativeBuildInputs = lib.optionals (runtimeInputs != [ ]) [ pkgs.makeWrapper ];
               doCheck = false;
@@ -94,7 +94,7 @@
             pname = "traces";
             inherit version;
             src = ./.;
-            vendorHash = "sha256-YLF2PPMI2gewd2rH90SC7ZNdOdGVG0/Qx1ILg2WxdAI=";
+            vendorHash = "sha256-rRIVJlsnAAmFwXTLzz8KO19V562fz3ZIVUUtpJMHSMQ=";
             subPackages = [ "." ];
             nativeBuildInputs = [
               pkgs.cue

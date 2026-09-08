@@ -1,101 +1,111 @@
 package ui
 
-import "strings"
+import (
+	"strings"
 
-type keyBinding struct {
-	id          string
-	keys        string
-	short       string
-	description string
-	help        bool
-	leader      bool
-	dock        bool
+	sharedkeymap "github.com/roshbhatia/go-utils/keymap"
+)
+
+var keyCatalog = sharedkeymap.Must(
+	sharedkeymap.Binding{ID: "focus-inspector", Keys: []string{"ctrl+j"}, Short: "inspector", Description: "focus the inspector"},
+	sharedkeymap.Binding{ID: "focus-trace", Keys: []string{"ctrl+k"}, Short: "trace", Description: "focus the trace"},
+	sharedkeymap.Binding{ID: "line", Keys: []string{"j", "k", "down", "up"}, Display: "j / k", Short: "line", Description: "one line in the focused pane (the arrows do the same)"},
+	sharedkeymap.Binding{ID: "page", Keys: []string{"ctrl+d", "ctrl+u", "ctrl+f", "ctrl+b"}, Display: "ctrl+d / ctrl+u", Short: "page", Description: "half page the focused pane (ctrl+f and ctrl+b page it whole)"},
+	sharedkeymap.Binding{ID: "inspect-page", Keys: []string{"d", "u"}, Display: "d / u", Short: "inspector", Description: "half page the inspector without moving the focus"},
+	sharedkeymap.Binding{ID: "inspect-line", Keys: []string{"ctrl+e", "ctrl+y"}, Display: "ctrl+e / ctrl+y", Description: "scroll the inspector one line, cursor unmoved"},
+	sharedkeymap.Binding{ID: "ends", Keys: []string{"gg", "G"}, Display: "gg / G", Short: "ends", Description: "start or end of the focused pane (trace G resumes follow)"},
+	sharedkeymap.Binding{ID: "viewport", Keys: []string{"H", "M", "L"}, Display: "H / M / L", Description: "cursor to the top, middle or bottom of the view"},
+	sharedkeymap.Binding{ID: "turn", Keys: []string{"{", "}", "[t", "]t"}, Display: "{ / }", Short: "turn", Description: "previous or next turn ([t and ]t also work)"},
+	sharedkeymap.Binding{ID: "match", Keys: []string{"n", "N"}, Display: "n / N", Description: "next or previous row of the current filter"},
+	sharedkeymap.Binding{ID: "filter", Keys: []string{"/"}, Short: "filter", Description: "filter the tree by text (esc clears it)"},
+	sharedkeymap.Binding{ID: "fold-step", Keys: []string{"h", "l"}, Display: "h / l", Description: "collapse or step out, or expand"},
+	sharedkeymap.Binding{ID: "fold", Keys: []string{"za", "zo", "zc"}, Display: "za / zo / zc", Description: "toggle, open, or close the fold under the cursor"},
+	sharedkeymap.Binding{ID: "fold-all", Keys: []string{"zR", "zM"}, Display: "zR / zM", Description: "open or close every fold"},
+	sharedkeymap.Binding{ID: "fold-path", Keys: []string{"zx"}, Description: "close all folds, then open the path to the cursor"},
+	sharedkeymap.Binding{ID: "visual", Keys: []string{"v"}, Short: "range", Description: "select a range; enter or v keeps it, and esc cancels it"},
+	sharedkeymap.Binding{ID: "mark-turn", Keys: []string{"V", "enter"}, Display: "V / enter", Short: "turn", Description: "toggle the whole turn under the cursor"},
+	sharedkeymap.Binding{ID: "mark-subtree", Keys: []string{"m"}, Short: "subtree", Description: "toggle the row and its whole subtree"},
+	sharedkeymap.Binding{ID: "cancel", Keys: []string{"esc"}, Description: "cancel a range, or clear every mark"},
+	sharedkeymap.Binding{ID: "yank", Keys: []string{"Y"}, Description: "yank the row's whole text to the clipboard"},
+	sharedkeymap.Binding{ID: "edit", Keys: []string{"e"}, Description: "open the row's whole text with its document provider"},
+	sharedkeymap.Binding{ID: "tab", Keys: []string{"tab", "shift+tab"}, Display: "tab / shift+tab", Short: "tabs", Description: "next or previous inspector tab"},
+	sharedkeymap.Binding{ID: "resize", Keys: []string{"-", "_", "=", "+"}, Display: "- / =", Description: "move the divider (dragging it does the same)"},
+	sharedkeymap.Binding{ID: "mouse", Keys: []string{"click", "wheel"}, Display: "click / wheel", Description: "select, fold, choose a tab, or scroll a pane"},
+	sharedkeymap.Binding{ID: "leader-follow", Keys: []string{"<space> f"}, Short: "follow", Description: "toggle live cursor follow"},
+	sharedkeymap.Binding{ID: "leader-anchor", Keys: []string{"<space> o"}, Short: "anchor", Description: "toggle the selected range anchor"},
+	sharedkeymap.Binding{ID: "leader-timeline", Keys: []string{"<space> t"}, Short: "timeline", Description: "draw each row's span beside it"},
+	sharedkeymap.Binding{ID: "leader-session", Keys: []string{"<space> s"}, Short: "session", Description: "choose another session"},
+	sharedkeymap.Binding{ID: "leader-all", Keys: []string{"<space> a"}, Short: "all", Description: "toggle all rows"},
+	sharedkeymap.Binding{ID: "leader-row", Keys: []string{"<space> m"}, Short: "one row", Description: "toggle only the current row"},
+	sharedkeymap.Binding{ID: "leader-inspector", Keys: []string{"<space> i"}, Short: "inspector", Description: "toggle or dock the inspector"},
+	sharedkeymap.Binding{ID: "leader-yank", Keys: []string{"<space> y"}, Short: "yank raw", Description: "yank the raw row text"},
+	sharedkeymap.Binding{ID: "leader-edit", Keys: []string{"<space> e"}, Short: "edit", Description: "open the raw row text with its document provider"},
+	sharedkeymap.Binding{ID: "dock-toggle", Keys: []string{"<space> i i"}, Short: "toggle", Description: "toggle the inspector", Hidden: true},
+	sharedkeymap.Binding{ID: "dock-left", Keys: []string{"<space> i h"}, Short: "left", Description: "dock the inspector left", Hidden: true},
+	sharedkeymap.Binding{ID: "dock-bottom", Keys: []string{"<space> i j"}, Short: "bottom", Description: "dock the inspector at the bottom", Hidden: true},
+	sharedkeymap.Binding{ID: "dock-top", Keys: []string{"<space> i k"}, Short: "top", Description: "dock the inspector at the top", Hidden: true},
+	sharedkeymap.Binding{ID: "dock-right", Keys: []string{"<space> i l"}, Short: "right", Description: "dock the inspector right", Hidden: true},
+	sharedkeymap.Binding{ID: "command", Keys: []string{":"}, Short: "command", Description: "open the command line"},
+	sharedkeymap.Binding{ID: "help", Keys: []string{"?"}, Short: "help", Description: "open this key list"},
+	sharedkeymap.Binding{ID: "quit", Keys: []string{"ZZ", "q"}, Display: "ZZ / q", Short: "quit", Description: "leave traces"},
+)
+
+var leaderBindingIDs = []string{
+	"leader-follow", "leader-anchor", "leader-timeline", "leader-session",
+	"leader-all", "leader-row", "leader-inspector", "leader-yank", "leader-edit", "help",
 }
 
-var keyBindings = []keyBinding{
-	{id: "focus-inspector", keys: "ctrl+j", short: "inspector", description: "focus the inspector", help: true},
-	{id: "focus-trace", keys: "ctrl+k", short: "trace", description: "focus the trace", help: true},
-	{id: "line", keys: "j / k", short: "line", description: "one line in the focused pane (the arrows do the same)", help: true},
-	{id: "page", keys: "ctrl+d / ctrl+u", short: "page", description: "half page the focused pane (ctrl+f and ctrl+b page it whole)", help: true},
-	{id: "inspect-page", keys: "d / u", short: "inspector", description: "half page the inspector without moving the focus", help: true},
-	{id: "inspect-line", keys: "ctrl+e / ctrl+y", description: "scroll the inspector one line, cursor unmoved", help: true},
-	{id: "ends", keys: "gg / G", short: "ends", description: "start or end of the focused pane (trace G resumes follow)", help: true},
-	{id: "viewport", keys: "H / M / L", description: "cursor to the top, middle or bottom of the view", help: true},
-	{id: "turn", keys: "{ / }", short: "turn", description: "previous or next turn ([t and ]t also work)", help: true},
-	{id: "match", keys: "n / N", description: "next or previous row of the current filter", help: true},
-	{id: "filter", keys: "/", short: "filter", description: "filter the tree by text (esc clears it)", help: true},
-	{id: "fold-step", keys: "h / l", description: "collapse or step out, or expand", help: true},
-	{id: "fold", keys: "za / zo / zc", description: "toggle, open, or close the fold under the cursor", help: true},
-	{id: "fold-all", keys: "zR / zM", description: "open or close every fold", help: true},
-	{id: "fold-path", keys: "zx", description: "close all folds, then open the path to the cursor", help: true},
-	{id: "visual", keys: "v", short: "range", description: "select a range; enter or v keeps it, and esc cancels it", help: true},
-	{id: "mark-turn", keys: "V / enter", short: "turn", description: "toggle the whole turn under the cursor", help: true},
-	{id: "mark-subtree", keys: "m", short: "subtree", description: "toggle the row and its whole subtree", help: true},
-	{id: "cancel", keys: "esc", description: "cancel a range, or clear every mark", help: true},
-	{id: "yank", keys: "Y", description: "yank the row's whole text to the clipboard", help: true},
-	{id: "edit", keys: "e", description: "open the row's whole text with its document provider", help: true},
-	{id: "tab", keys: "tab / shift+tab", short: "pane", description: "next or previous inspector tab", help: true},
-	{id: "resize", keys: "- / =", description: "move the divider (dragging it does the same)", help: true},
-	{id: "mouse", keys: "click / wheel", description: "select, fold, choose a tab, or scroll a pane", help: true},
-	{id: "leader-follow", keys: "<space> f", short: "follow", description: "toggle live cursor follow", help: true, leader: true},
-	{id: "leader-anchor", keys: "<space> o", short: "anchor", description: "toggle the selected range anchor", help: true, leader: true},
-	{id: "leader-timeline", keys: "<space> t", short: "timeline", description: "draw each row's span beside it", help: true, leader: true},
-	{id: "leader-session", keys: "<space> s", short: "session", description: "choose another session", help: true, leader: true},
-	{id: "leader-all", keys: "<space> a", short: "all", description: "toggle all rows", help: true, leader: true},
-	{id: "leader-row", keys: "<space> m", short: "one row", description: "toggle only the current row", help: true, leader: true},
-	{id: "leader-inspector", keys: "<space> i", short: "inspector", description: "toggle or dock the inspector", help: true, leader: true},
-	{id: "leader-yank", keys: "<space> y", short: "yank raw", description: "yank the raw row text", help: true, leader: true},
-	{id: "leader-edit", keys: "<space> e", short: "edit", description: "open the raw row text with its document provider", help: true, leader: true},
-	{id: "dock-toggle", keys: "<space> i i", short: "toggle", description: "toggle the inspector", dock: true},
-	{id: "dock-left", keys: "<space> i h", short: "left", description: "dock the inspector left", dock: true},
-	{id: "dock-bottom", keys: "<space> i j", short: "bottom", description: "dock the inspector at the bottom", dock: true},
-	{id: "dock-top", keys: "<space> i k", short: "top", description: "dock the inspector at the top", dock: true},
-	{id: "dock-right", keys: "<space> i l", short: "right", description: "dock the inspector right", dock: true},
-	{id: "command", keys: ":", short: "command", description: "open the command line", help: true},
-	{id: "help", keys: "?", short: "help", description: "open this key list", help: true, leader: true},
-	{id: "quit", keys: "ZZ / q", short: "quit", description: "leave traces", help: true},
-}
+var dockBindingIDs = []string{"dock-toggle", "dock-left", "dock-bottom", "dock-top", "dock-right"}
 
-func bindingByID(id string) keyBinding {
-	for _, binding := range keyBindings {
-		if binding.id == id {
-			return binding
-		}
+func bindingByID(id string) sharedkeymap.Binding {
+	binding, ok := keyCatalog.Binding(id)
+	if !ok {
+		panic("unknown key binding: " + id)
 	}
-	panic("unknown key binding: " + id)
+	return binding
 }
 
 func bindingHint(id string) string {
-	binding := bindingByID(id)
-	return binding.keys + " " + binding.short
+	hint, err := keyCatalog.Hint(id)
+	if err != nil {
+		panic(err)
+	}
+	return hint.String()
 }
 
 func bindingHints(ids ...string) string {
-	parts := make([]string, 0, len(ids))
-	for _, id := range ids {
-		parts = append(parts, bindingHint(id))
+	line, err := keyCatalog.HintLine("   ", ids...)
+	if err != nil {
+		panic(err)
 	}
-	return strings.Join(parts, "   ")
+	return line
 }
 
 func leaderHints(dock bool) string {
-	parts := []string{}
-	for _, binding := range keyBindings {
-		if binding.dock != dock || (!dock && !binding.leader) {
-			continue
+	ids := leaderBindingIDs
+	if dock {
+		ids = dockBindingIDs
+	}
+	parts := make([]string, 0, len(ids))
+	for _, id := range ids {
+		binding := bindingByID(id)
+		keys := binding.Display
+		if keys == "" {
+			keys = strings.Join(binding.Keys, " / ")
 		}
-		key := strings.TrimPrefix(binding.keys, "<space> ")
-		parts = append(parts, key+" "+binding.short)
+		parts = append(parts, strings.TrimPrefix(keys, "<space> ")+" "+binding.Short)
 	}
 	return strings.Join(parts, "   ")
 }
 
-func helpBindings() []keyBinding {
-	out := []keyBinding{}
-	for _, binding := range keyBindings {
-		if binding.help {
-			out = append(out, binding)
-		}
+func helpBindings() []sharedkeymap.Binding {
+	rows, err := keyCatalog.HelpRows(nil)
+	if err != nil {
+		panic(err)
+	}
+	out := make([]sharedkeymap.Binding, 0, len(rows))
+	for _, row := range rows {
+		out = append(out, bindingByID(row.ID))
 	}
 	return out
 }

@@ -210,8 +210,8 @@ func TestNarrowFooterKeepsFocusAndHelpHints(t *testing.T) {
 		t.Fatalf("narrow inspector footer = %q", footer)
 	}
 	for _, binding := range helpBindings() {
-		if binding.id == "ends" && !strings.Contains(binding.description, "focused pane") {
-			t.Fatalf("end-motion help = %q", binding.description)
+		if binding.ID == "ends" && !strings.Contains(binding.Description, "focused pane") {
+			t.Fatalf("end-motion help = %q", binding.Description)
 		}
 	}
 }

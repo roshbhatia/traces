@@ -49,6 +49,7 @@ import (
 	"unicode/utf8"
 
 	sharedprovider "github.com/roshbhatia/go-utils/provider"
+	"github.com/roshbhatia/go-utils/xdg"
 	"github.com/roshbhatia/traces/internal/otlp"
 )
 
@@ -975,13 +976,7 @@ func providerDirectories(settings Settings) []string {
 			filepath.Clean(filepath.Join(filepath.Dir(executable), "..", "share", "traces", "providers")),
 		)
 	}
-	dataHome := strings.TrimSpace(os.Getenv("XDG_DATA_HOME"))
-	if dataHome == "" {
-		if home, err := os.UserHomeDir(); err == nil {
-			dataHome = filepath.Join(home, ".local", "share")
-		}
-	}
-	if dataHome != "" {
+	if dataHome, err := xdg.DataHome(); err == nil {
 		candidates = append(candidates, filepath.Join(dataHome, "traces", "providers"))
 	}
 	dataDirs := strings.TrimSpace(os.Getenv("XDG_DATA_DIRS"))

@@ -157,6 +157,17 @@ func TestDiffCacheKeepsDiskAgeInMemory(t *testing.T) {
 	}
 }
 
+func TestDiffCacheIgnoresRelativeXDGRoot(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("XDG_CACHE_HOME", "relative-cache")
+
+	want := filepath.Join(home, ".cache", "traces", "diffs")
+	if got := diffCacheDirectory(); got != want {
+		t.Fatalf("cache directory = %q, want %q", got, want)
+	}
+}
+
 func isolateDiffCache(t *testing.T) {
 	t.Helper()
 	root := t.TempDir()
