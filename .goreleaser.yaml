@@ -81,6 +81,14 @@ builds:
     flags: [-trimpath]
     mod_timestamp: "{{ .CommitTimestamp }}"
     targets: [darwin_arm64, linux_amd64, linux_arm64]
+  - id: traces-provider-cursor
+    main: ./extras/cursor
+    binary: traces-provider-cursor
+    env:
+      - CGO_ENABLED=0
+    flags: [-trimpath]
+    mod_timestamp: "{{ .CommitTimestamp }}"
+    targets: [darwin_arm64, linux_amd64, linux_arm64]
 
 archives:
   - id: core
@@ -104,6 +112,7 @@ archives:
       - traces-provider-antigravity
       - traces-provider-claude
       - traces-provider-codex
+      - traces-provider-cursor
       - traces-provider-desktop
       - traces-provider-gate
       - traces-provider-git
@@ -126,6 +135,8 @@ archives:
         dst: share/traces/providers/claude/provider.yaml
       - src: extras/codex/provider.yaml
         dst: share/traces/providers/codex/provider.yaml
+      - src: extras/cursor/provider.yaml
+        dst: share/traces/providers/cursor/provider.yaml
       - src: extras/desktop/provider.yaml
         dst: share/traces/providers/desktop/provider.yaml
       - src: extras/gate/provider.yaml
@@ -164,6 +175,16 @@ archives:
       - LICENSE
       - src: extras/codex/provider.yaml
         dst: share/traces/providers/codex/provider.yaml
+  - id: provider-cursor
+    ids: [traces-provider-cursor]
+    formats: [tar.gz]
+    name_template: >-
+      {{ .ProjectName }}_provider_cursor_{{ .Version }}_{{ .Os }}_{{ .Arch }}
+    files:
+      - README.md
+      - LICENSE
+      - src: extras/cursor/provider.yaml
+        dst: share/traces/providers/cursor/provider.yaml
   - id: provider-desktop
     ids: [traces-provider-desktop]
     formats: [tar.gz]
