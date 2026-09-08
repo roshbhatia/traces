@@ -16,12 +16,14 @@ source_globs=(
   --glob '*.nix'
 )
 
-# Discover provider names from extras. Git is part of the core vocabulary, so
-# its name is too broad to audit as a standalone word.
+# Discover provider names from extras. Git and cursor are part of the core
+# vocabulary, one for the repository and one for the selected row of the tree,
+# so their names are too broad to audit as standalone words. The legacy terms
+# below still catch the harness spellings of the second one.
 provider_terms=()
 for manifest in "$repo_dir"/extras/*/provider.yaml; do
   provider_name=$(basename "$(dirname "$manifest")")
-  if [[ $provider_name != git ]]; then
+  if [[ $provider_name != git && $provider_name != cursor ]]; then
     provider_terms+=("$provider_name")
   fi
 done
