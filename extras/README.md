@@ -7,6 +7,7 @@ JSON protocol.
 - `traces-provider-claude`
 - `traces-provider-codex`
 - `traces-provider-desktop`
+- `traces-provider-gate`
 - `traces-provider-git`
 - `traces-provider-opencode`
 
@@ -14,6 +15,10 @@ JSON protocol.
 Git. `opencode` wraps its reader with the OpenCode CLI in `PATH`. The core and
 the other provider closures do not inherit either dependency. `desktop`
 implements the optional `clipboard.write` and `document.open` host actions.
+
+`gate` reads the hook dispatcher's decision log and keys each verdict into the
+harness session it interrupted, so a denied call is a row beside the calls that
+ran. List it under that harness's service name in `sources`.
 
 The flake discovers provider directories instead of listing their names. Each
 provider remains a separate package, and CI validates it with only that package

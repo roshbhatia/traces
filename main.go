@@ -779,7 +779,7 @@ func show(batch otlp.Batch, from, which string, scope []string, directory string
 		return 1
 	}
 	ui.Print(os.Stdout, found)
-	// 2 for a run that holds a failed span, so a script can gate on it without
+	// 2 for a run that holds a failed span, so a script can branch on it without
 	// reading the tree. 1 stays "traces could not answer", which is the ordinary
 	// meaning of 1 and the one a caller already handles.
 	if failed(found) {
