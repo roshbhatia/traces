@@ -426,30 +426,11 @@ func validateSupportedActions(manifest sharedprovider.Manifest) error {
 	return nil
 }
 
-// ProviderSchema narrows the shared provider format to Traces capabilities.
+// ProviderSchema is the provider/v1 manifest schema, byte for byte as
+// provider-spec publishes it. The Traces action vocabulary is a narrowing on
+// top of it: schema/narrow.cue for cue vet, supportedActionNames at runtime.
 func ProviderSchema() ([]byte, error) {
-	data, err := sharedprovider.Schema()
-	if err != nil {
-		return nil, err
-	}
-	var schema map[string]any
-	if err := json.Unmarshal(data, &schema); err != nil {
-		return nil, fmt.Errorf("decode provider schema: %w", err)
-	}
-	properties, ok := schema["properties"].(map[string]any)
-	if !ok {
-		return nil, fmt.Errorf("provider schema has no properties")
-	}
-	actions, ok := properties["actions"].(map[string]any)
-	if !ok {
-		return nil, fmt.Errorf("provider schema has no actions")
-	}
-	actions["propertyNames"] = map[string]any{"enum": supportedActionNames}
-	encoded, err := json.MarshalIndent(schema, "", "  ")
-	if err != nil {
-		return nil, fmt.Errorf("encode provider schema: %w", err)
-	}
-	return append(encoded, '\n'), nil
+	return sharedprovider.Schema()
 }
 
 func providerCommandError(stderr string, err error) error {

@@ -957,24 +957,17 @@ func TestSessionCapabilitiesResolveRelativeProviderCommand(t *testing.T) {
 	}
 }
 
-func TestProviderSchemaRestrictsActionNames(t *testing.T) {
-	data, err := ProviderSchema()
+func TestProviderSchemaIsTheSpecBytes(t *testing.T) {
+	got, err := ProviderSchema()
 	if err != nil {
 		t.Fatal(err)
 	}
-	var schema struct {
-		Properties map[string]struct {
-			PropertyNames struct {
-				Enum []string `json:"enum"`
-			} `json:"propertyNames"`
-		} `json:"properties"`
-	}
-	if err := json.Unmarshal(data, &schema); err != nil {
+	want, err := sharedprovider.Schema()
+	if err != nil {
 		t.Fatal(err)
 	}
-	got := schema.Properties["actions"].PropertyNames.Enum
-	if strings.Join(got, ",") != strings.Join(supportedActionNames, ",") {
-		t.Fatalf("action schema = %v, want %v", got, supportedActionNames)
+	if !bytes.Equal(got, want) {
+		t.Fatal("traces edits the provider schema instead of shipping the spec")
 	}
 }
 
