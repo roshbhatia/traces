@@ -68,7 +68,7 @@
               pname = "traces-provider-${name}";
               inherit version;
               src = ./.;
-              vendorHash = "sha256-rRIVJlsnAAmFwXTLzz8KO19V562fz3ZIVUUtpJMHSMQ=";
+              vendorHash = "sha256-NrMxrhs++9wwX5ijKGkX2fyqXRklgkOOSdHfnr9RaZo=";
               subPackages = [ "./extras/${name}" ];
               nativeBuildInputs = lib.optionals (runtimeInputs != [ ]) [ pkgs.makeWrapper ];
               doCheck = false;
@@ -94,7 +94,7 @@
             pname = "traces";
             inherit version;
             src = ./.;
-            vendorHash = "sha256-rRIVJlsnAAmFwXTLzz8KO19V562fz3ZIVUUtpJMHSMQ=";
+            vendorHash = "sha256-NrMxrhs++9wwX5ijKGkX2fyqXRklgkOOSdHfnr9RaZo=";
             subPackages = [ "." ];
             nativeBuildInputs = [
               pkgs.cue
