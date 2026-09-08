@@ -104,6 +104,7 @@
             src = ./.;
             vendorHash = "sha256-I7bNicSm03+uhEB5somhsts7Zhh7s5b0EHJdK6Eq1iU=";
             subPackages = [ "." ];
+            ldflags = [ "-X main.version=${version}" ];
             nativeBuildInputs = [
               pkgs.cue
               pkgs.gitMinimal
@@ -307,8 +308,9 @@
                 ${pkgs.bash}/bin/bash ./hack/check-provider-neutral.sh
                 touch "$out"
               '';
-          # The committed schema is the pinned spec export and every manifest
-          # satisfies the spec plus schema/narrow.cue.
+          # The committed schema is the pinned spec export, every manifest
+          # satisfies the spec plus schema/narrow.cue, and the binary reports
+          # the spec version the flake pins.
           provider-spec-contract =
             pkgs.runCommand "traces-provider-spec-contract"
               {
@@ -331,6 +333,7 @@
                     exit 1
                   fi
                 done
+                ${traces}/bin/traces --version | grep --fixed-strings --line-regexp "provider/v1 spec $(cat ${provider-spec}/VERSION)"
                 touch "$out"
               '';
           closures = pkgs.runCommand "traces-closure-boundaries" { nativeBuildInputs = [ pkgs.gnugrep ]; } ''

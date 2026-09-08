@@ -103,6 +103,7 @@ _traces() {
         '--service[Filter by service]:value:' \
         '--session[Attach by session ID or prefix]:value:' \
         '--since[Initial provider window]:value:' \
+        '--version[Print the build and provider spec versions]' \
         '--view[Non-interactive view]:value:__traces_completion_values_3' \
         '1:command:(completion generate provider)'
 

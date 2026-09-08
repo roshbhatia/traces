@@ -8,6 +8,8 @@ builds:
       - CGO_ENABLED=0
     flags: [-trimpath]
     mod_timestamp: "{{ .CommitTimestamp }}"
+    ldflags:
+      - -s -w -X main.version={{ .Version }}
     targets: [darwin_arm64, linux_amd64, linux_arm64]
   - id: traces-full-core
     main: .
@@ -16,6 +18,8 @@ builds:
       - CGO_ENABLED=0
     flags: [-trimpath]
     mod_timestamp: "{{ .CommitTimestamp }}"
+    ldflags:
+      - -s -w -X main.version={{ .Version }}
     targets: [darwin_arm64, linux_amd64, linux_arm64]
   - id: traces-full-launcher
     main: ./cmd/traces-full
