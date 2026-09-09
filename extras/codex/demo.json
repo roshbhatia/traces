@@ -1,10 +1,11 @@
 {
   "name": "codex",
-  "summary": "Read a token parser repair from a Codex transcript",
-  "replay": true,
+  "summary": "Read Codex rollout activity",
+  "replay": false,
   "core": "traces",
   "nix": "github:roshbhatia/traces#provider-codex",
   "brew": "traces-provider-codex",
   "binary": "traces-provider-codex",
-  "manifest_path": "share/traces/providers/codex/provider.yaml"
+  "manifest_path": "share/traces/providers/codex/provider.yaml",
+  "status": "pending"
 }

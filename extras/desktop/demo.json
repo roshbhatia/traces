@@ -1,10 +1,11 @@
 {
   "name": "desktop",
-  "summary": "Open the saved token parser review report",
+  "summary": "Copy text and open documents through host desktop commands",
   "replay": false,
   "core": "traces",
   "nix": "github:roshbhatia/traces#provider-desktop",
   "brew": "traces-provider-desktop",
   "binary": "traces-provider-desktop",
-  "manifest_path": "share/traces/providers/desktop/provider.yaml"
+  "manifest_path": "share/traces/providers/desktop/provider.yaml",
+  "status": "pending"
 }

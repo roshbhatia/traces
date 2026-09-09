@@ -3,58 +3,63 @@
   "providers": [
     {
       "name": "antigravity",
-      "summary": "Replay an offline token parser review with antigravity",
-      "replay": true,
+      "summary": "Read Antigravity CLI trajectory activity and directory sessions",
+      "replay": false,
       "core": "traces",
       "nix": "github:roshbhatia/traces#provider-antigravity",
       "brew": "traces-provider-antigravity",
       "binary": "traces-provider-antigravity",
-      "manifest_path": "share/traces/providers/antigravity/provider.yaml"
+      "manifest_path": "share/traces/providers/antigravity/provider.yaml",
+      "status": "pending"
     },
     {
       "name": "claude",
-      "summary": "Read a token parser review from a Claude transcript",
-      "replay": true,
+      "summary": "Read Claude Code transcript activity and directory sessions",
+      "replay": false,
       "core": "traces",
       "nix": "github:roshbhatia/traces#provider-claude",
       "brew": "traces-provider-claude",
       "binary": "traces-provider-claude",
-      "manifest_path": "share/traces/providers/claude/provider.yaml"
+      "manifest_path": "share/traces/providers/claude/provider.yaml",
+      "status": "pending"
     },
     {
       "name": "codex",
-      "summary": "Read a token parser repair from a Codex transcript",
-      "replay": true,
+      "summary": "Read Codex rollout activity",
+      "replay": false,
       "core": "traces",
       "nix": "github:roshbhatia/traces#provider-codex",
       "brew": "traces-provider-codex",
       "binary": "traces-provider-codex",
-      "manifest_path": "share/traces/providers/codex/provider.yaml"
+      "manifest_path": "share/traces/providers/codex/provider.yaml",
+      "status": "pending"
     },
     {
       "name": "cursor",
-      "summary": "Replay an offline token parser review with cursor",
-      "replay": true,
+      "summary": "Read Cursor CLI transcript activity and directory sessions",
+      "replay": false,
       "core": "traces",
       "nix": "github:roshbhatia/traces#provider-cursor",
       "brew": "traces-provider-cursor",
       "binary": "traces-provider-cursor",
-      "manifest_path": "share/traces/providers/cursor/provider.yaml"
+      "manifest_path": "share/traces/providers/cursor/provider.yaml",
+      "status": "pending"
     },
     {
       "name": "desktop",
-      "summary": "Open the saved token parser review report",
+      "summary": "Copy text and open documents through host desktop commands",
       "replay": false,
       "core": "traces",
       "nix": "github:roshbhatia/traces#provider-desktop",
       "brew": "traces-provider-desktop",
       "binary": "traces-provider-desktop",
-      "manifest_path": "share/traces/providers/desktop/provider.yaml"
+      "manifest_path": "share/traces/providers/desktop/provider.yaml",
+      "status": "pending"
     },
     {
       "name": "devin",
-      "summary": "Replay an offline token parser review with devin",
-      "replay": true,
+      "summary": "Read Devin CLI session activity and directory sessions",
+      "replay": false,
       "core": "traces",
       "nix": "github:roshbhatia/traces#provider-devin",
       "brew": "traces-provider-devin",
@@ -62,21 +67,23 @@
       "dependencies": [
         "sqlite"
       ],
-      "manifest_path": "share/traces/providers/devin/provider.yaml"
+      "manifest_path": "share/traces/providers/devin/provider.yaml",
+      "status": "pending"
     },
     {
       "name": "gate",
-      "summary": "Replay an offline token parser review with gate",
-      "replay": true,
+      "summary": "Read gate hook decisions as activity",
+      "replay": false,
       "core": "traces",
       "nix": "github:roshbhatia/traces#provider-gate",
       "brew": "traces-provider-gate",
       "binary": "traces-provider-gate",
-      "manifest_path": "share/traces/providers/gate/provider.yaml"
+      "manifest_path": "share/traces/providers/gate/provider.yaml",
+      "status": "pending"
     },
     {
       "name": "git",
-      "summary": "Inspect the token parser patch",
+      "summary": "Render a two-file diff with Git",
       "replay": false,
       "core": "traces",
       "nix": "github:roshbhatia/traces#provider-git",
@@ -85,12 +92,13 @@
       "dependencies": [
         "git"
       ],
-      "manifest_path": "share/traces/providers/git/provider.yaml"
+      "manifest_path": "share/traces/providers/git/provider.yaml",
+      "status": "pending"
     },
     {
       "name": "opencode",
-      "summary": "Read an offline token parser review export",
-      "replay": true,
+      "summary": "Read OpenCode exported session activity",
+      "replay": false,
       "core": "traces",
       "nix": "github:roshbhatia/traces#provider-opencode",
       "brew": "traces-provider-opencode",
@@ -98,16 +106,18 @@
       "dependencies": [
         "opencode"
       ],
-      "manifest_path": "share/traces/providers/opencode/provider.yaml"
+      "manifest_path": "share/traces/providers/opencode/provider.yaml",
+      "status": "pending"
     },
     {
       "name": "worklog",
-      "summary": "Replay an offline token parser review with worklog",
-      "replay": true,
+      "summary": "Summarize Claude Code session work",
+      "replay": false,
       "core": "traces",
       "nix": "github:roshbhatia/traces#worklog",
       "brew": "traces-worklog",
-      "binary": "traces-worklog"
+      "binary": "traces-worklog",
+      "status": "pending"
     }
   ],
   "packages": [
@@ -115,7 +125,7 @@
       "name": "traces-provider-antigravity",
       "kind": "provider",
       "binary": "traces-provider-antigravity",
-      "description": "Replay an offline token parser review with antigravity",
+      "description": "Read Antigravity CLI trajectory activity and directory sessions",
       "archive": "traces_provider_antigravity_%{version}_%{os}_%{arch}.tar.gz",
       "share": [
         "share/traces/providers/antigravity/provider.yaml"
@@ -126,7 +136,7 @@
       "name": "traces-provider-claude",
       "kind": "provider",
       "binary": "traces-provider-claude",
-      "description": "Read a token parser review from a Claude transcript",
+      "description": "Read Claude Code transcript activity and directory sessions",
       "archive": "traces_provider_claude_%{version}_%{os}_%{arch}.tar.gz",
       "share": [
         "share/traces/providers/claude/provider.yaml"
@@ -137,7 +147,7 @@
       "name": "traces-provider-codex",
       "kind": "provider",
       "binary": "traces-provider-codex",
-      "description": "Read a token parser repair from a Codex transcript",
+      "description": "Read Codex rollout activity",
       "archive": "traces_provider_codex_%{version}_%{os}_%{arch}.tar.gz",
       "share": [
         "share/traces/providers/codex/provider.yaml"
@@ -148,7 +158,7 @@
       "name": "traces-provider-cursor",
       "kind": "provider",
       "binary": "traces-provider-cursor",
-      "description": "Replay an offline token parser review with cursor",
+      "description": "Read Cursor CLI transcript activity and directory sessions",
       "archive": "traces_provider_cursor_%{version}_%{os}_%{arch}.tar.gz",
       "share": [
         "share/traces/providers/cursor/provider.yaml"
@@ -159,7 +169,7 @@
       "name": "traces-provider-desktop",
       "kind": "provider",
       "binary": "traces-provider-desktop",
-      "description": "Open the saved token parser review report",
+      "description": "Copy text and open documents through host desktop commands",
       "archive": "traces_provider_desktop_%{version}_%{os}_%{arch}.tar.gz",
       "share": [
         "share/traces/providers/desktop/provider.yaml"
@@ -170,7 +180,7 @@
       "name": "traces-provider-devin",
       "kind": "provider",
       "binary": "traces-provider-devin",
-      "description": "Replay an offline token parser review with devin",
+      "description": "Read Devin CLI session activity and directory sessions",
       "archive": "traces_provider_devin_%{version}_%{os}_%{arch}.tar.gz",
       "share": [
         "share/traces/providers/devin/provider.yaml"
@@ -184,7 +194,7 @@
       "name": "traces-provider-gate",
       "kind": "provider",
       "binary": "traces-provider-gate",
-      "description": "Replay an offline token parser review with gate",
+      "description": "Read gate hook decisions as activity",
       "archive": "traces_provider_gate_%{version}_%{os}_%{arch}.tar.gz",
       "share": [
         "share/traces/providers/gate/provider.yaml"
@@ -195,7 +205,7 @@
       "name": "traces-provider-git",
       "kind": "provider",
       "binary": "traces-provider-git",
-      "description": "Inspect the token parser patch",
+      "description": "Render a two-file diff with Git",
       "archive": "traces_provider_git_%{version}_%{os}_%{arch}.tar.gz",
       "share": [
         "share/traces/providers/git/provider.yaml"
@@ -209,7 +219,7 @@
       "name": "traces-provider-opencode",
       "kind": "provider",
       "binary": "traces-provider-opencode",
-      "description": "Read an offline token parser review export",
+      "description": "Read OpenCode exported session activity",
       "archive": "traces_provider_opencode_%{version}_%{os}_%{arch}.tar.gz",
       "share": [
         "share/traces/providers/opencode/provider.yaml"
@@ -223,7 +233,7 @@
       "name": "traces-worklog",
       "kind": "tool",
       "binary": "traces-worklog",
-      "description": "Replay an offline token parser review with worklog",
+      "description": "Summarize Claude Code session work",
       "archive": "traces_tool_worklog_%{version}_%{os}_%{arch}.tar.gz",
       "share": [],
       "python_script": false

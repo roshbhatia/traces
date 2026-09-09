@@ -1,9 +1,10 @@
 {
   "name": "worklog",
-  "summary": "Replay an offline token parser review with worklog",
-  "replay": true,
+  "summary": "Summarize Claude Code session work",
+  "replay": false,
   "core": "traces",
   "nix": "github:roshbhatia/traces#worklog",
   "brew": "traces-worklog",
-  "binary": "traces-worklog"
+  "binary": "traces-worklog",
+  "status": "pending"
 }

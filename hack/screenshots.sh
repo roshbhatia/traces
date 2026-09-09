@@ -2,29 +2,16 @@
 set -euo pipefail
 
 repo_dir=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
-mkdir -p "$repo_dir/docs"
-build_dir=$(mktemp -d)
-fixture=$(mktemp -d)
-trap 'rm -rf "$build_dir" "$fixture"' EXIT
+recording=$(mktemp -d /tmp/traces-ci-recording.XXXXXX)
+printf 'Recording inputs and output: %s\n' "$recording" >&2
 
-go build -o "$build_dir/traces" .
-python3 "$repo_dir/hack/token-fixture.py" "$fixture/checkout-service"
-(cd "$fixture/checkout-service" && go test -v ./internal/auth) > "$fixture/test-output.txt"
-jq --rawfile output "$fixture/test-output.txt" --compact-output '.[] | if .spanId == "test" then .attrs.output = $output else . end' "$repo_dir/hack/fixtures/screenshot-spans.json" > "$fixture/token-review.jsonl"
-
-(
-  cd "$fixture"
-  PATH="$build_dir:$PATH" freeze \
-    --execute "traces -once -color always -provider , -file token-review.jsonl -session token-review" \
-    --output "$repo_dir/docs/traces.png" \
-    --width 1100 \
-    --padding 24 \
-    --margin 16 \
-    --window
-
-  PATH="$build_dir:$PATH" \
-    vhs "$repo_dir/hack/traces.tape" --output "$repo_dir/docs/traces.gif"
-
-  PATH="${build_dir}:${PATH}" \
-    vhs "${repo_dir}/hack/traces-noninteractive.tape" --output "${repo_dir}/docs/traces-noninteractive.gif"
-)
+cp "$repo_dir/hack/recordings/orc-ci.json" "$recording/run.json"
+jq -c -f "$repo_dir/hack/github-run.jq" "$recording/run.json" > "$recording/orc-ci.jsonl"
+go build -o "$recording/traces" "$repo_dir"
+cd "$recording"
+export PATH="$recording:$PATH"
+traces -once -all -provider , -file orc-ci.jsonl > report.txt
+vhs "$repo_dir/hack/traces.tape" --output traces.gif
+ffmpeg -v error -y -ss 25 -i traces.gif -frames:v 1 traces.png
+install -m 0644 traces.gif "$repo_dir/docs/traces.gif"
+install -m 0644 traces.png "$repo_dir/docs/traces.png"

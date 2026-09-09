@@ -1,10 +1,11 @@
 {
   "name": "claude",
-  "summary": "Read a token parser review from a Claude transcript",
-  "replay": true,
+  "summary": "Read Claude Code transcript activity and directory sessions",
+  "replay": false,
   "core": "traces",
   "nix": "github:roshbhatia/traces#provider-claude",
   "brew": "traces-provider-claude",
   "binary": "traces-provider-claude",
-  "manifest_path": "share/traces/providers/claude/provider.yaml"
+  "manifest_path": "share/traces/providers/claude/provider.yaml",
+  "status": "pending"
 }

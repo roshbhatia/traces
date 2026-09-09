@@ -1,6 +1,6 @@
 # desktop
 
-Open the saved token parser review report.
+Copy text and open documents through host desktop commands.
 
 ## Install
 
@@ -13,9 +13,4 @@ Install the core utility separately, or select its all-provider bundle. Runtime 
 
 ## Demo
 
-![Open the saved token parser review report](demo.gif)
-
-[Tape source](demo.tape) · [Task script](demo.sh)
-
-Run `nix develop -c bash extras/desktop/demo.sh` to run the task without recording.
-Run `nix develop -c python3 hack/extra-demos.py desktop` to record it.
+Live recording pending. The previous recording used generated activity and has been withdrawn.

@@ -1,6 +1,6 @@
 {
   "name": "git",
-  "summary": "Inspect the token parser patch",
+  "summary": "Render a two-file diff with Git",
   "replay": false,
   "core": "traces",
   "nix": "github:roshbhatia/traces#provider-git",
@@ -9,5 +9,6 @@
   "dependencies": [
     "git"
   ],
-  "manifest_path": "share/traces/providers/git/provider.yaml"
+  "manifest_path": "share/traces/providers/git/provider.yaml",
+  "status": "pending"
 }

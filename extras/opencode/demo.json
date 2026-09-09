@@ -1,7 +1,7 @@
 {
   "name": "opencode",
-  "summary": "Read an offline token parser review export",
-  "replay": true,
+  "summary": "Read OpenCode exported session activity",
+  "replay": false,
   "core": "traces",
   "nix": "github:roshbhatia/traces#provider-opencode",
   "brew": "traces-provider-opencode",
@@ -9,5 +9,6 @@
   "dependencies": [
     "opencode"
   ],
-  "manifest_path": "share/traces/providers/opencode/provider.yaml"
+  "manifest_path": "share/traces/providers/opencode/provider.yaml",
+  "status": "pending"
 }

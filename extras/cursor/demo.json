@@ -1,10 +1,11 @@
 {
   "name": "cursor",
-  "summary": "Replay an offline token parser review with cursor",
-  "replay": true,
+  "summary": "Read Cursor CLI transcript activity and directory sessions",
+  "replay": false,
   "core": "traces",
   "nix": "github:roshbhatia/traces#provider-cursor",
   "brew": "traces-provider-cursor",
   "binary": "traces-provider-cursor",
-  "manifest_path": "share/traces/providers/cursor/provider.yaml"
+  "manifest_path": "share/traces/providers/cursor/provider.yaml",
+  "status": "pending"
 }

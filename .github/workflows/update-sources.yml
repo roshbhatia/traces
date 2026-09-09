@@ -49,11 +49,9 @@ jobs:
 
       - name: Refresh extra documentation
         run: |
-          python3 hack/extra-docs.py
-          if ! python3 hack/extra-demos.py --check; then
-            nix develop --accept-flake-config -c python3 hack/extra-demos.py
-          fi
-          python3 hack/release-extras.py
+          nix develop -c uv run --offline --no-managed-python --no-python-downloads --python python3 --script hack/extra-docs.py
+          nix develop -c uv run --offline --no-managed-python --no-python-downloads --python python3 --script hack/extra-demos.py --check
+          nix develop -c uv run --offline --no-managed-python --no-python-downloads --python python3 --script hack/release-extras.py
 
       - name: Create pull request
         id: cpr

@@ -1,10 +1,12 @@
 # traces
 
-![Traces tree view](docs/traces.png)
+![Orc CI jobs in the Traces tree](docs/traces.png)
 
-![Traces interactive agent run](docs/traces.gif)
+![Inspecting CI jobs and steps in Traces](docs/traces.gif)
 
-![Traces non-interactive report](docs/traces-noninteractive.gif)
+The recording inspects [an Orc CI run](https://github.com/roshbhatia/orc/actions/runs/34410303228).
+[Captured source data](hack/recordings/orc-ci.json) contains the actual job names, step names, results, and timestamps.
+[jq](hack/github-run.jq) converts that data into trace records; [VHS](hack/traces.tape) records folding and inspection.
 
 `traces` renders agent activity as a folding trace tree. The core reads OTLP
 and a newline-delimited provider protocol. It does not import a harness,

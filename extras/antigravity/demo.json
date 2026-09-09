@@ -1,10 +1,11 @@
 {
   "name": "antigravity",
-  "summary": "Replay an offline token parser review with antigravity",
-  "replay": true,
+  "summary": "Read Antigravity CLI trajectory activity and directory sessions",
+  "replay": false,
   "core": "traces",
   "nix": "github:roshbhatia/traces#provider-antigravity",
   "brew": "traces-provider-antigravity",
   "binary": "traces-provider-antigravity",
-  "manifest_path": "share/traces/providers/antigravity/provider.yaml"
+  "manifest_path": "share/traces/providers/antigravity/provider.yaml",
+  "status": "pending"
 }

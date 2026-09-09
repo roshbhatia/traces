@@ -1,6 +1,6 @@
 # git
 
-Inspect the token parser patch.
+Render a two-file diff with Git.
 
 ## Install
 
@@ -13,9 +13,4 @@ Install the core utility separately, or select its all-provider bundle. Runtime 
 
 ## Demo
 
-![Inspect the token parser patch](demo.gif)
-
-[Tape source](demo.tape) · [Task script](demo.sh)
-
-Run `nix develop -c bash extras/git/demo.sh` to run the task without recording.
-Run `nix develop -c python3 hack/extra-demos.py git` to record it.
+Live recording pending. The previous recording used generated activity and has been withdrawn.

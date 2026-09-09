@@ -24,7 +24,7 @@ Validate the discovered commands and protocol output before opening the TUI:
 TRACES_CONFIG="$PWD/examples/local-harnesses/config.yaml" traces provider validate
 ```
 
-![Token parser activity](demo.gif)
+Live recording pending. The previous recording used a generated transcript and has been withdrawn.
 
 [Tape source](demo.tape)
 

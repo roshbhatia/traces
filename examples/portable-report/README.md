@@ -12,7 +12,7 @@ traces-provider-codex --since 45m \
 The same newline-delimited stream can be archived, filtered, or sent to a
 different renderer without coupling that renderer to Codex.
 
-![Token parser activity](demo.gif)
+Live recording pending. The previous recording used a generated transcript and has been withdrawn.
 
 [Tape source](demo.tape)
 

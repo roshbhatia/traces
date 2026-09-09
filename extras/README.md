@@ -46,15 +46,15 @@ Installing `desktop` does not enable it; select it through
 
 | Extra | Task | Demo |
 |---|---|---|
-| [antigravity](antigravity/README.md) | Replay an offline token parser review with antigravity | [Tape](antigravity/demo.tape) |
-| [claude](claude/README.md) | Read a token parser review from a Claude transcript | [Tape](claude/demo.tape) |
-| [codex](codex/README.md) | Read a token parser repair from a Codex transcript | [Tape](codex/demo.tape) |
-| [cursor](cursor/README.md) | Replay an offline token parser review with cursor | [Tape](cursor/demo.tape) |
-| [desktop](desktop/README.md) | Open the saved token parser review report | [Tape](desktop/demo.tape) |
-| [devin](devin/README.md) | Replay an offline token parser review with devin | [Tape](devin/demo.tape) |
-| [gate](gate/README.md) | Replay an offline token parser review with gate | [Tape](gate/demo.tape) |
-| [git](git/README.md) | Inspect the token parser patch | [Tape](git/demo.tape) |
-| [opencode](opencode/README.md) | Read an offline token parser review export | [Tape](opencode/demo.tape) |
-| [worklog](worklog/README.md) | Replay an offline token parser review with worklog | [Tape](worklog/demo.tape) |
+| [antigravity](antigravity/README.md) | Read Antigravity CLI trajectory activity and directory sessions | Pending |
+| [claude](claude/README.md) | Read Claude Code transcript activity and directory sessions | Pending |
+| [codex](codex/README.md) | Read Codex rollout activity | Pending |
+| [cursor](cursor/README.md) | Read Cursor CLI transcript activity and directory sessions | Pending |
+| [desktop](desktop/README.md) | Copy text and open documents through host desktop commands | Pending |
+| [devin](devin/README.md) | Read Devin CLI session activity and directory sessions | Pending |
+| [gate](gate/README.md) | Read gate hook decisions as activity | Pending |
+| [git](git/README.md) | Render a two-file diff with Git | Pending |
+| [opencode](opencode/README.md) | Read OpenCode exported session activity | Pending |
+| [worklog](worklog/README.md) | Summarize Claude Code session work | Pending |
 
 <!-- END GENERATED CATALOG -->

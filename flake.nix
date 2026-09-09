@@ -429,6 +429,7 @@
             packages = [
               pkgs.sqlite
               pkgs.python3
+              pkgs.uv
               pkgs.ffmpeg
               pkgs.git
               pkgs.go

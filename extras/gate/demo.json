@@ -1,10 +1,11 @@
 {
   "name": "gate",
-  "summary": "Replay an offline token parser review with gate",
-  "replay": true,
+  "summary": "Read gate hook decisions as activity",
+  "replay": false,
   "core": "traces",
   "nix": "github:roshbhatia/traces#provider-gate",
   "brew": "traces-provider-gate",
   "binary": "traces-provider-gate",
-  "manifest_path": "share/traces/providers/gate/provider.yaml"
+  "manifest_path": "share/traces/providers/gate/provider.yaml",
+  "status": "pending"
 }

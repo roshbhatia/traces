@@ -1,8 +1,6 @@
 # claude
 
-Read a token parser review from a Claude transcript.
-
-The demo replays an offline response fixture. It does not contact a model or claim a new agent run.
+Read Claude Code transcript activity and directory sessions.
 
 ## Install
 
@@ -15,9 +13,4 @@ Install the core utility separately, or select its all-provider bundle. Runtime 
 
 ## Demo
 
-![Read a token parser review from a Claude transcript](demo.gif)
-
-[Tape source](demo.tape) · [Task script](demo.sh)
-
-Run `nix develop -c bash extras/claude/demo.sh` to run the task without recording.
-Run `nix develop -c python3 hack/extra-demos.py claude` to record it.
+Live recording pending. The previous recording used generated activity and has been withdrawn.
