@@ -18,9 +18,23 @@ Git. `opencode` wraps its reader with the OpenCode CLI in `PATH`. The core and
 the other provider closures do not inherit either dependency. `desktop`
 implements the optional `clipboard.write` and `document.open` host actions.
 
+A reader two extras need lives under `extras/internal/`, which Go opens to
+every directory below `extras/` and to nothing above it. The Claude Code
+transcript reader is there, at `extras/internal/claude/transcript`.
+
 `gate` reads the hook dispatcher's decision log and keys each verdict into the
 harness session it interrupted, so a denied call is a row beside the calls that
 ran. List it under that harness's service name in `sources`.
+
+A directory with a `default.nix` and no manifest is a tool: a command shipped
+beside the providers that answers no Traces action. There is one.
+
+- `traces-worklog` reduces one finished session to one JSON line for a report
+  over many sessions: the repositories it moved and by how much, the first and
+  last prompt, the model, and the duration. A harness's session-end hook runs
+  it with the harness's payload on stdin. It reads the transcript through the
+  shared Claude Code reader and parses none of its own. The line is schema v2,
+  and a golden test holds a record the previous writer produced.
 
 The flake discovers provider directories instead of listing their names. Each
 provider remains a separate package, and CI validates it with only that package
@@ -28,7 +42,9 @@ and its manifest visible. Traces itself can run without any provider. Install
 custom manifests in `~/.config/traces/providers`, or add their directory to
 `TRACES_PROVIDER_PATH`.
 
-Install the provider-only bundle with `github:roshbhatia/traces#extras`.
+Install the provider-only bundle with `github:roshbhatia/traces#extras`. It
+carries the tools too. Install one tool with its `tool-<name>` package, such
+as `github:roshbhatia/traces#tool-worklog`.
 Install one provider with its `provider-<name>` package, such as
 `github:roshbhatia/traces#provider-git`. Install `#full` for the core and all
 bundled providers. The default package remains the provider-neutral core.
