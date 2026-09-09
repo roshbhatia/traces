@@ -1,0 +1,13 @@
+{
+  "name": "devin",
+  "summary": "Replay an offline token parser review with devin",
+  "replay": true,
+  "core": "traces",
+  "nix": "github:roshbhatia/traces#provider-devin",
+  "brew": "traces-provider-devin",
+  "binary": "traces-provider-devin",
+  "dependencies": [
+    "sqlite"
+  ],
+  "manifest_path": "share/traces/providers/devin/provider.yaml"
+}

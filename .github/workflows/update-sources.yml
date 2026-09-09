@@ -9,6 +9,9 @@ permissions:
   contents: write
   pull-requests: write
 
+env:
+  GH_TOKEN: ${{ github.token }}
+
 jobs:
   update:
     runs-on: ubuntu-latest
@@ -36,13 +39,21 @@ jobs:
       - name: Update flake inputs
         env:
           NIX_CONFIG: "access-tokens = github.com=${{ secrets.GITHUB_TOKEN }}"
-        run: nix flake update
+        run: python3 "$GITHUB_WORKSPACE/hack/update-flakes.py"
 
       - name: Update Go vendor hash
         run: ./hack/update-vendor-hash.sh
 
       - name: Verify updates
         run: nix flake check --print-build-logs
+
+      - name: Refresh extra documentation
+        run: |
+          python3 hack/extra-docs.py
+          if ! python3 hack/extra-demos.py --check; then
+            nix develop --accept-flake-config -c python3 hack/extra-demos.py
+          fi
+          python3 hack/release-extras.py
 
       - name: Create pull request
         id: cpr

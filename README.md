@@ -90,7 +90,7 @@ editor:
   provider: desktop
 ```
 
-Provider manifests use the shared `provider/v1` contract. Traces recognizes
+Provider manifests use the `provider/v1` contract. Traces recognizes
 seven capabilities: `activity.read`, `session.current`, `session.discover`,
 `diff.render`, `clipboard.write`, `document.open`, and `provider.validate`.
 Each action defines direct argv and environment Go templates.

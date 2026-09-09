@@ -1,0 +1,9 @@
+{
+  "name": "worklog",
+  "summary": "Replay an offline token parser review with worklog",
+  "replay": true,
+  "core": "traces",
+  "nix": "github:roshbhatia/traces#worklog",
+  "brew": "traces-worklog",
+  "binary": "traces-worklog"
+}

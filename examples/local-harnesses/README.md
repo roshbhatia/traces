@@ -23,3 +23,10 @@ Validate the discovered commands and protocol output before opening the TUI:
 ```bash
 TRACES_CONFIG="$PWD/examples/local-harnesses/config.yaml" traces provider validate
 ```
+
+![Token parser activity](demo.gif)
+
+[Tape source](demo.tape)
+
+The recording uses an offline transcript fixture with output from real local regression tests.
+Run `nix develop -c bash hack/recipe-demos.sh` to regenerate both recipe demos.

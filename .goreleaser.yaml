@@ -1,6 +1,8 @@
 version: 2
 
 builds:
+  # BEGIN GENERATED EXTRAS BUILDS
+  # END GENERATED EXTRAS
   - id: traces
     main: .
     binary: traces
@@ -111,6 +113,8 @@ builds:
     targets: [darwin_arm64, linux_amd64, linux_arm64]
 
 archives:
+  # BEGIN GENERATED EXTRAS ARCHIVES
+  # END GENERATED EXTRAS
   - id: core
     ids: [traces]
     formats: [tar.gz]
@@ -274,3 +278,7 @@ checksum:
 
 changelog:
   use: github-native
+
+release:
+  extra_files:
+    - glob: package-index.json

@@ -4,15 +4,6 @@ Each provider directory owns its manifest, executable or script, and Nix
 package definition. Harness readers emit the generic Traces newline-delimited
 JSON protocol.
 
-- `traces-provider-antigravity`
-- `traces-provider-claude`
-- `traces-provider-codex`
-- `traces-provider-cursor`
-- `traces-provider-desktop`
-- `traces-provider-gate`
-- `traces-provider-git`
-- `traces-provider-opencode`
-
 `git` implements `diff.render` with a namespaced wrapper whose closure supplies
 Git. `opencode` wraps its reader with the OpenCode CLI in `PATH`. The core and
 the other provider closures do not inherit either dependency. `desktop`
@@ -50,3 +41,20 @@ Install one provider with its `provider-<name>` package, such as
 bundled providers. The default package remains the provider-neutral core.
 Installing `desktop` does not enable it; select it through
 `clipboard.provider` and `editor.provider`.
+
+<!-- BEGIN GENERATED CATALOG -->
+
+| Extra | Task | Demo |
+|---|---|---|
+| [antigravity](antigravity/README.md) | Replay an offline token parser review with antigravity | [Tape](antigravity/demo.tape) |
+| [claude](claude/README.md) | Read a token parser review from a Claude transcript | [Tape](claude/demo.tape) |
+| [codex](codex/README.md) | Read a token parser repair from a Codex transcript | [Tape](codex/demo.tape) |
+| [cursor](cursor/README.md) | Replay an offline token parser review with cursor | [Tape](cursor/demo.tape) |
+| [desktop](desktop/README.md) | Open the saved token parser review report | [Tape](desktop/demo.tape) |
+| [devin](devin/README.md) | Replay an offline token parser review with devin | [Tape](devin/demo.tape) |
+| [gate](gate/README.md) | Replay an offline token parser review with gate | [Tape](gate/demo.tape) |
+| [git](git/README.md) | Inspect the token parser patch | [Tape](git/demo.tape) |
+| [opencode](opencode/README.md) | Read an offline token parser review export | [Tape](opencode/demo.tape) |
+| [worklog](worklog/README.md) | Replay an offline token parser review with worklog | [Tape](worklog/demo.tape) |
+
+<!-- END GENERATED CATALOG -->

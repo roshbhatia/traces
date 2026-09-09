@@ -1,6 +1,8 @@
 package extras
 
 import (
+	"os"
+	"path/filepath"
 	"slices"
 	"testing"
 
@@ -18,7 +20,15 @@ func TestReleaseProvidersDeclareExternalCommands(t *testing.T) {
 	}
 	for _, test := range tests {
 		t.Run(test.provider, func(t *testing.T) {
-			loaded, err := sharedprovider.Discover(test.provider)
+			manifest, err := os.ReadFile(filepath.Join(test.provider, "provider.yaml"))
+			if err != nil {
+				t.Fatal(err)
+			}
+			installed := t.TempDir()
+			if err := os.WriteFile(filepath.Join(installed, "provider.yaml"), manifest, 0o600); err != nil {
+				t.Fatal(err)
+			}
+			loaded, err := sharedprovider.Discover(installed)
 			if err != nil {
 				t.Fatal(err)
 			}

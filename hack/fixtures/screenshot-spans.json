@@ -1,90 +1,90 @@
 [
   {
-    "traceId": "demo",
+    "traceId": "token-review",
     "spanId": "turn",
     "name": "agent.turn",
-    "service": "example-agent",
-    "session": "demo",
+    "service": "recorded-review",
+    "session": "token-review",
     "startUnixNano": "1788278400000000000",
     "endUnixNano": "1788278412000000000",
     "attrs": {
-      "prompt": "Move diff rendering behind a provider contract and prove the fallback still works",
-      "cwd": "/work/changes"
+      "prompt": "Offline replay: repair authorization header validation",
+      "cwd": "./checkout-service"
     }
   },
   {
-    "traceId": "demo",
+    "traceId": "token-review",
     "spanId": "plan",
     "parentId": "turn",
     "name": "agent.model",
-    "service": "example-agent",
-    "session": "demo",
+    "service": "recorded-review",
+    "session": "token-review",
     "startUnixNano": "1788278400500000000",
     "endUnixNano": "1788278401800000000",
     "attrs": {
-      "model": "sample-model",
+      "model": "offline-review-fixture",
       "stop_reason": "tool_use",
       "ttft_ms": "420",
       "duration_ms": "1300"
     }
   },
   {
-    "traceId": "demo",
+    "traceId": "token-review",
     "spanId": "search",
     "parentId": "turn",
     "name": "agent.tool",
-    "service": "example-agent",
-    "session": "demo",
+    "service": "recorded-review",
+    "session": "token-review",
     "startUnixNano": "1788278401900000000",
     "endUnixNano": "1788278402400000000",
     "attrs": {
       "tool_name": "Shell",
       "traces.action": "search",
-      "input": "rg -n \"renderPatch|DiffProvider\" internal"
+      "input": "rg -n ValidToken internal/auth"
     }
   },
   {
-    "traceId": "demo",
+    "traceId": "token-review",
     "spanId": "edit",
     "parentId": "turn",
     "name": "agent.edit",
-    "service": "example-agent",
-    "session": "demo",
+    "service": "recorded-review",
+    "session": "token-review",
     "startUnixNano": "1788278402500000000",
     "endUnixNano": "1788278406100000000",
     "attrs": {
       "tool_name": "Edit",
       "traces.action": "edit",
-      "traces.patch": "diff --git a/internal/ui/diff.go b/internal/ui/diff.go\n@@ -18 +18 @@\n-return renderBuiltin(patch)\n+return provider.Render(patch)"
+      "traces.patch": "diff --git a/internal/auth/token.go b/internal/auth/token.go\n@@ -3 +3 @@\n-return strings.Contains(header, \"Bearer \")\n+return strings.HasPrefix(header, \"Bearer \")"
     }
   },
   {
-    "traceId": "demo",
+    "traceId": "token-review",
     "spanId": "test",
     "parentId": "turn",
     "name": "agent.tool",
-    "service": "example-agent",
-    "session": "demo",
+    "service": "recorded-review",
+    "session": "token-review",
     "startUnixNano": "1788278406200000000",
     "endUnixNano": "1788278409800000000",
     "attrs": {
       "tool_name": "Shell",
       "traces.action": "test",
-      "input": "go test -race ./...",
-      "output": "ok  example/tool/internal/ui"
+      "input": "go test -v ./internal/auth",
+      "output": "Captured by hack/screenshots.sh"
     }
   },
   {
-    "traceId": "demo",
+    "traceId": "token-review",
     "spanId": "review",
     "parentId": "turn",
     "name": "agent.model",
-    "service": "example-agent",
-    "session": "demo",
+    "service": "recorded-review",
+    "session": "token-review",
     "startUnixNano": "1788278410000000000",
     "endUnixNano": "1788278411800000000",
     "attrs": {
-      "model": "sample-model",
+      "model": "offline-review-fixture",
       "stop_reason": "end_turn",
       "ttft_ms": "510",
       "duration_ms": "1800"

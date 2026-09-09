@@ -1,0 +1,13 @@
+{
+  "name": "git",
+  "summary": "Inspect the token parser patch",
+  "replay": false,
+  "core": "traces",
+  "nix": "github:roshbhatia/traces#provider-git",
+  "brew": "traces-provider-git",
+  "binary": "traces-provider-git",
+  "dependencies": [
+    "git"
+  ],
+  "manifest_path": "share/traces/providers/git/provider.yaml"
+}

@@ -11,7 +11,7 @@ Set TypingSpeed 30ms
 
 Sleep 1s
 
-Type "traces -once -color always -provider , -file demo.json -session demo"
+Type "traces -once -color always -provider , -file token-review.jsonl -session token-review"
 Enter
-Wait+Screen /go test -race/
+Wait+Screen /go test -v/
 Sleep 4s

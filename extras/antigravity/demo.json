@@ -1,0 +1,10 @@
+{
+  "name": "antigravity",
+  "summary": "Replay an offline token parser review with antigravity",
+  "replay": true,
+  "core": "traces",
+  "nix": "github:roshbhatia/traces#provider-antigravity",
+  "brew": "traces-provider-antigravity",
+  "binary": "traces-provider-antigravity",
+  "manifest_path": "share/traces/providers/antigravity/provider.yaml"
+}

@@ -11,9 +11,9 @@ Set TypingSpeed 30ms
 
 Sleep 1s
 
-Type "cat demo.json | traces -color always -provider , -file - -session demo"
+Type "cat token-review.jsonl | traces -color always -provider , -file - -session token-review"
 Enter
-Wait+Screen /provider contract/
+Wait+Screen /authorization header/
 Sleep 2s
 Type "k"
 Sleep 1s

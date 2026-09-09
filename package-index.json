@@ -1,0 +1,232 @@
+{
+  "version": 1,
+  "providers": [
+    {
+      "name": "antigravity",
+      "summary": "Replay an offline token parser review with antigravity",
+      "replay": true,
+      "core": "traces",
+      "nix": "github:roshbhatia/traces#provider-antigravity",
+      "brew": "traces-provider-antigravity",
+      "binary": "traces-provider-antigravity",
+      "manifest_path": "share/traces/providers/antigravity/provider.yaml"
+    },
+    {
+      "name": "claude",
+      "summary": "Read a token parser review from a Claude transcript",
+      "replay": true,
+      "core": "traces",
+      "nix": "github:roshbhatia/traces#provider-claude",
+      "brew": "traces-provider-claude",
+      "binary": "traces-provider-claude",
+      "manifest_path": "share/traces/providers/claude/provider.yaml"
+    },
+    {
+      "name": "codex",
+      "summary": "Read a token parser repair from a Codex transcript",
+      "replay": true,
+      "core": "traces",
+      "nix": "github:roshbhatia/traces#provider-codex",
+      "brew": "traces-provider-codex",
+      "binary": "traces-provider-codex",
+      "manifest_path": "share/traces/providers/codex/provider.yaml"
+    },
+    {
+      "name": "cursor",
+      "summary": "Replay an offline token parser review with cursor",
+      "replay": true,
+      "core": "traces",
+      "nix": "github:roshbhatia/traces#provider-cursor",
+      "brew": "traces-provider-cursor",
+      "binary": "traces-provider-cursor",
+      "manifest_path": "share/traces/providers/cursor/provider.yaml"
+    },
+    {
+      "name": "desktop",
+      "summary": "Open the saved token parser review report",
+      "replay": false,
+      "core": "traces",
+      "nix": "github:roshbhatia/traces#provider-desktop",
+      "brew": "traces-provider-desktop",
+      "binary": "traces-provider-desktop",
+      "manifest_path": "share/traces/providers/desktop/provider.yaml"
+    },
+    {
+      "name": "devin",
+      "summary": "Replay an offline token parser review with devin",
+      "replay": true,
+      "core": "traces",
+      "nix": "github:roshbhatia/traces#provider-devin",
+      "brew": "traces-provider-devin",
+      "binary": "traces-provider-devin",
+      "dependencies": [
+        "sqlite"
+      ],
+      "manifest_path": "share/traces/providers/devin/provider.yaml"
+    },
+    {
+      "name": "gate",
+      "summary": "Replay an offline token parser review with gate",
+      "replay": true,
+      "core": "traces",
+      "nix": "github:roshbhatia/traces#provider-gate",
+      "brew": "traces-provider-gate",
+      "binary": "traces-provider-gate",
+      "manifest_path": "share/traces/providers/gate/provider.yaml"
+    },
+    {
+      "name": "git",
+      "summary": "Inspect the token parser patch",
+      "replay": false,
+      "core": "traces",
+      "nix": "github:roshbhatia/traces#provider-git",
+      "brew": "traces-provider-git",
+      "binary": "traces-provider-git",
+      "dependencies": [
+        "git"
+      ],
+      "manifest_path": "share/traces/providers/git/provider.yaml"
+    },
+    {
+      "name": "opencode",
+      "summary": "Read an offline token parser review export",
+      "replay": true,
+      "core": "traces",
+      "nix": "github:roshbhatia/traces#provider-opencode",
+      "brew": "traces-provider-opencode",
+      "binary": "traces-provider-opencode",
+      "dependencies": [
+        "opencode"
+      ],
+      "manifest_path": "share/traces/providers/opencode/provider.yaml"
+    },
+    {
+      "name": "worklog",
+      "summary": "Replay an offline token parser review with worklog",
+      "replay": true,
+      "core": "traces",
+      "nix": "github:roshbhatia/traces#worklog",
+      "brew": "traces-worklog",
+      "binary": "traces-worklog"
+    }
+  ],
+  "packages": [
+    {
+      "name": "traces-provider-antigravity",
+      "kind": "provider",
+      "binary": "traces-provider-antigravity",
+      "description": "Replay an offline token parser review with antigravity",
+      "archive": "traces_provider_antigravity_%{version}_%{os}_%{arch}.tar.gz",
+      "share": [
+        "share/traces/providers/antigravity/provider.yaml"
+      ],
+      "python_script": false
+    },
+    {
+      "name": "traces-provider-claude",
+      "kind": "provider",
+      "binary": "traces-provider-claude",
+      "description": "Read a token parser review from a Claude transcript",
+      "archive": "traces_provider_claude_%{version}_%{os}_%{arch}.tar.gz",
+      "share": [
+        "share/traces/providers/claude/provider.yaml"
+      ],
+      "python_script": false
+    },
+    {
+      "name": "traces-provider-codex",
+      "kind": "provider",
+      "binary": "traces-provider-codex",
+      "description": "Read a token parser repair from a Codex transcript",
+      "archive": "traces_provider_codex_%{version}_%{os}_%{arch}.tar.gz",
+      "share": [
+        "share/traces/providers/codex/provider.yaml"
+      ],
+      "python_script": false
+    },
+    {
+      "name": "traces-provider-cursor",
+      "kind": "provider",
+      "binary": "traces-provider-cursor",
+      "description": "Replay an offline token parser review with cursor",
+      "archive": "traces_provider_cursor_%{version}_%{os}_%{arch}.tar.gz",
+      "share": [
+        "share/traces/providers/cursor/provider.yaml"
+      ],
+      "python_script": false
+    },
+    {
+      "name": "traces-provider-desktop",
+      "kind": "provider",
+      "binary": "traces-provider-desktop",
+      "description": "Open the saved token parser review report",
+      "archive": "traces_provider_desktop_%{version}_%{os}_%{arch}.tar.gz",
+      "share": [
+        "share/traces/providers/desktop/provider.yaml"
+      ],
+      "python_script": false
+    },
+    {
+      "name": "traces-provider-devin",
+      "kind": "provider",
+      "binary": "traces-provider-devin",
+      "description": "Replay an offline token parser review with devin",
+      "archive": "traces_provider_devin_%{version}_%{os}_%{arch}.tar.gz",
+      "share": [
+        "share/traces/providers/devin/provider.yaml"
+      ],
+      "python_script": false,
+      "dependencies": [
+        "sqlite"
+      ]
+    },
+    {
+      "name": "traces-provider-gate",
+      "kind": "provider",
+      "binary": "traces-provider-gate",
+      "description": "Replay an offline token parser review with gate",
+      "archive": "traces_provider_gate_%{version}_%{os}_%{arch}.tar.gz",
+      "share": [
+        "share/traces/providers/gate/provider.yaml"
+      ],
+      "python_script": false
+    },
+    {
+      "name": "traces-provider-git",
+      "kind": "provider",
+      "binary": "traces-provider-git",
+      "description": "Inspect the token parser patch",
+      "archive": "traces_provider_git_%{version}_%{os}_%{arch}.tar.gz",
+      "share": [
+        "share/traces/providers/git/provider.yaml"
+      ],
+      "python_script": false,
+      "dependencies": [
+        "git"
+      ]
+    },
+    {
+      "name": "traces-provider-opencode",
+      "kind": "provider",
+      "binary": "traces-provider-opencode",
+      "description": "Read an offline token parser review export",
+      "archive": "traces_provider_opencode_%{version}_%{os}_%{arch}.tar.gz",
+      "share": [
+        "share/traces/providers/opencode/provider.yaml"
+      ],
+      "python_script": false,
+      "dependencies": [
+        "opencode"
+      ]
+    },
+    {
+      "name": "traces-worklog",
+      "kind": "tool",
+      "binary": "traces-worklog",
+      "description": "Replay an offline token parser review with worklog",
+      "archive": "traces_tool_worklog_%{version}_%{os}_%{arch}.tar.gz",
+      "share": [],
+      "python_script": false
+    }
+  ]
+}
