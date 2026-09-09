@@ -101,6 +101,14 @@ builds:
     flags: [-trimpath]
     mod_timestamp: "{{ .CommitTimestamp }}"
     targets: [darwin_arm64, linux_amd64, linux_arm64]
+  - id: traces-worklog
+    main: ./extras/worklog
+    binary: traces-worklog
+    env:
+      - CGO_ENABLED=0
+    flags: [-trimpath]
+    mod_timestamp: "{{ .CommitTimestamp }}"
+    targets: [darwin_arm64, linux_amd64, linux_arm64]
 
 archives:
   - id: core
@@ -130,6 +138,7 @@ archives:
       - traces-provider-gate
       - traces-provider-git
       - traces-provider-opencode
+      - traces-worklog
     formats: [tar.gz]
     name_template: >-
       {{ .ProjectName }}_full_{{ .Version }}_{{ .Os }}_{{ .Arch }}
@@ -250,6 +259,15 @@ archives:
       - LICENSE
       - src: extras/opencode/provider.yaml
         dst: share/traces/providers/opencode/provider.yaml
+
+  - id: tool-worklog
+    ids: [traces-worklog]
+    formats: [tar.gz]
+    name_template: >-
+      {{ .ProjectName }}_tool_worklog_{{ .Version }}_{{ .Os }}_{{ .Arch }}
+    files:
+      - README.md
+      - LICENSE
 
 checksum:
   name_template: checksums.txt
