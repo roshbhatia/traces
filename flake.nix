@@ -31,6 +31,14 @@
         && builtins.pathExists (./extras + "/${name}/default.nix")
         && builtins.pathExists (./extras + "/${name}/provider.yaml")
       ) (builtins.attrNames providerEntries);
+      # A tool is an extra with no manifest: a command shipped beside the
+      # providers that answers no Traces action.
+      toolNames = builtins.filter (
+        name:
+        providerEntries.${name} == "directory"
+        && builtins.pathExists (./extras + "/${name}/default.nix")
+        && !builtins.pathExists (./extras + "/${name}/provider.yaml")
+      ) (builtins.attrNames providerEntries);
     in
     {
       formatter = eachSystem (
@@ -98,6 +106,32 @@
               inherit pkgs mkGoProvider;
             }
           );
+          mkGoTool =
+            { name, directory }:
+            pkgs.buildGoModule {
+              pname = "traces-${name}";
+              inherit version;
+              src = ./.;
+              vendorHash = "sha256-I7bNicSm03+uhEB5somhsts7Zhh7s5b0EHJdK6Eq1iU=";
+              subPackages = [ "./extras/${name}" ];
+              doCheck = false;
+              postInstall = ''
+                mv "$out/bin/${name}" "$out/bin/traces-${name}"
+              '';
+              meta = {
+                description = "Composable agent trace tool: ${name}";
+                homepage = "https://github.com/roshbhatia/traces";
+                license = lib.licenses.mit;
+                mainProgram = "traces-${name}";
+                platforms = lib.platforms.unix;
+              };
+            };
+          toolPackages = lib.genAttrs toolNames (
+            name:
+            import (./extras + "/${name}/default.nix") {
+              inherit pkgs mkGoTool;
+            }
+          );
           traces = pkgs.buildGoModule {
             pname = "traces";
             inherit version;
@@ -146,9 +180,9 @@
           };
           extras = pkgs.symlinkJoin {
             name = "traces-extras-${version}";
-            paths = lib.attrValues providerPackages;
+            paths = lib.attrValues providerPackages ++ lib.attrValues toolPackages;
             meta = {
-              description = "Optional providers for the Traces viewer";
+              description = "Optional providers and tools for the Traces viewer";
               homepage = "https://github.com/roshbhatia/traces";
               license = lib.licenses.mit;
               platforms = lib.platforms.unix;
@@ -173,12 +207,14 @@
           providerOutputs = lib.mapAttrs' (
             name: package: lib.nameValuePair "provider-${name}" package
           ) providerPackages;
+          toolOutputs = lib.mapAttrs' (name: package: lib.nameValuePair "tool-${name}" package) toolPackages;
         in
         {
           inherit traces extras full;
           default = traces;
         }
         // providerOutputs
+        // toolOutputs
       );
 
       apps = eachSystem (system: {
@@ -248,6 +284,19 @@
               fi
             ''
           ) providerNames;
+          toolChecks = lib.concatMapStringsSep "\n" (
+            name:
+            let
+              package = self.packages.${system}.${"tool-${name}"};
+            in
+            ''
+              test -x "${package}/bin/traces-${name}"
+              test ! -e "${package}/bin/${name}"
+              test ! -e "${package}/share/traces/providers/${name}"
+              test -x "${extras}/bin/traces-${name}"
+              test -x "${full}/bin/traces-${name}"
+            ''
+          ) toolNames;
           providerClosureChecks = lib.concatMapStringsSep "\n" (
             name:
             let
@@ -299,6 +348,7 @@
               PATH="${full}/bin:${pkgs.coreutils}/bin" \
               "${full}/bin/traces" provider list --names)
             ${providerChecks}
+            ${toolChecks}
             touch "$out"
           '';
           provider-neutral =
@@ -352,6 +402,18 @@
               ''
             ) providerNames}
             ${providerClosureChecks}
+            ${lib.concatMapStringsSep "\n" (
+              name:
+              let
+                package = self.packages.${system}.${"tool-${name}"};
+                packageClosure = closureOf package;
+              in
+              ''
+                ! grep -Fqx "${package}" "${coreClosure}/store-paths"
+                grep -Fqx "${package}" "${extrasClosure}/store-paths"
+                ! grep -Fqx "${traces}" "${packageClosure}/store-paths"
+              ''
+            ) toolNames}
             touch "$out"
           '';
         }
