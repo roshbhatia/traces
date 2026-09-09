@@ -932,6 +932,10 @@ func pick(store *session.Store, which string) *session.Session {
 	return all[0]
 }
 
+func (s sources) followFile(out chan<- otlp.Batch, stop <-chan struct{}) {
+	otlp.Follow(s.path, 400*time.Millisecond, source.DecodeAny, out, stop)
+}
+
 // watch follows every source at once. Each writes into the same channel, and
 // the file's own closer is the one that ends it: a provider poll is slow and
 // the file is the source that is always present.
@@ -941,7 +945,7 @@ func (s sources) watch(which string, scope []string, directory string) int {
 
 	fromFile := make(chan otlp.Batch, 32)
 	if s.path != "" {
-		go otlp.Follow(s.path, 400*time.Millisecond, fromFile, stop)
+		go s.followFile(fromFile, stop)
 	} else {
 		// Standard input is read once and ends. Following it would block the
 		// view on a pipe that is already closed.

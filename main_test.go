@@ -6,6 +6,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"reflect"
 	"slices"
 	"strings"
 	"testing"
@@ -14,6 +15,34 @@ import (
 	"github.com/roshbhatia/go-utils/completion"
 	"github.com/roshbhatia/traces/internal/otlp"
 )
+
+func TestInteractiveFileUsesReportDecoder(t *testing.T) {
+	file := filepath.Join(t.TempDir(), "activity.jsonl")
+	line := `{"traceId":"run","spanId":"build","name":"Build package","service":"ci","session":"run","startUnixNano":"1","endUnixNano":"2"}` + "\n"
+	if err := os.WriteFile(file, []byte(line), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	s := sources{path: file}
+	want, err := s.read()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(want.Spans) != 1 {
+		t.Fatalf("report decoded %d spans", len(want.Spans))
+	}
+	stop := make(chan struct{})
+	defer close(stop)
+	batches := make(chan otlp.Batch, 1)
+	go s.followFile(batches, stop)
+	select {
+	case got := <-batches:
+		if !reflect.DeepEqual(got, want) {
+			t.Fatalf("interactive batch %#v differs from report %#v", got, want)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("interactive reader did not emit the normalized span")
+	}
+}
 
 func TestRenderProviderList(t *testing.T) {
 	got, err := renderProviderList(providerListView{

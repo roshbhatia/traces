@@ -252,7 +252,7 @@ func SessionID(attrs map[string]string) string {
 // batch per read so the caller redraws once per poll rather than once per span.
 // The collector rotates the file at 64 MB; a size that went backwards means the
 // rotation happened, so reopen from the start of the new file.
-func Follow(path string, every time.Duration, out chan<- Batch, stop <-chan struct{}) {
+func Follow(path string, every time.Duration, decode func([]byte) Batch, out chan<- Batch, stop <-chan struct{}) {
 	defer close(out)
 
 	var (
@@ -301,7 +301,7 @@ func Follow(path string, every time.Duration, out chan<- Batch, stop <-chan stru
 					full = append(rest, chunk...)
 					rest = nil
 				}
-				one := Decode(full)
+				one := decode(full)
 				batch.Spans = append(batch.Spans, one.Spans...)
 				batch.Records = append(batch.Records, one.Records...)
 			}
