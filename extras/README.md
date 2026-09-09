@@ -26,13 +26,25 @@ transcript reader is there, at `extras/internal/claude/transcript`.
 harness session it interrupted, so a denied call is a row beside the calls that
 ran. List it under that harness's service name in `sources`.
 
+A directory with a `default.nix` and no manifest is a tool: a command shipped
+beside the providers that answers no Traces action. There is one.
+
+- `traces-worklog` reduces one finished session to one JSON line for a report
+  over many sessions: the repositories it moved and by how much, the first and
+  last prompt, the model, and the duration. A harness's session-end hook runs
+  it with the harness's payload on stdin. It reads the transcript through the
+  shared Claude Code reader and parses none of its own. The line is schema v2,
+  and a golden test holds a record the previous writer produced.
+
 The flake discovers provider directories instead of listing their names. Each
 provider remains a separate package, and CI validates it with only that package
 and its manifest visible. Traces itself can run without any provider. Install
 custom manifests in `~/.config/traces/providers`, or add their directory to
 `TRACES_PROVIDER_PATH`.
 
-Install the provider-only bundle with `github:roshbhatia/traces#extras`.
+Install the provider-only bundle with `github:roshbhatia/traces#extras`. It
+carries the tools too. Install one tool with its `tool-<name>` package, such
+as `github:roshbhatia/traces#tool-worklog`.
 Install one provider with its `provider-<name>` package, such as
 `github:roshbhatia/traces#provider-git`. Install `#full` for the core and all
 bundled providers. The default package remains the provider-neutral core.
