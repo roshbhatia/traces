@@ -39,7 +39,7 @@ jobs:
       - name: Update flake inputs
         env:
           NIX_CONFIG: "access-tokens = github.com=${{ secrets.GITHUB_TOKEN }}"
-        run: python3 "$GITHUB_WORKSPACE/hack/update-flakes.py"
+        run: nix shell --inputs-from . nixpkgs#uv nixpkgs#python3 -c uv run --offline --no-python-downloads --script hack/update-flakes.py
 
       - name: Update Go vendor hash
         run: ./hack/update-vendor-hash.sh
