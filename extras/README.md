@@ -18,6 +18,10 @@ Git. `opencode` wraps its reader with the OpenCode CLI in `PATH`. The core and
 the other provider closures do not inherit either dependency. `desktop`
 implements the optional `clipboard.write` and `document.open` host actions.
 
+A reader two extras need lives under `extras/internal/`, which Go opens to
+every directory below `extras/` and to nothing above it. The Claude Code
+transcript reader is there, at `extras/internal/claude/transcript`.
+
 `gate` reads the hook dispatcher's decision log and keys each verdict into the
 harness session it interrupted, so a denied call is a row beside the calls that
 ran. List it under that harness's service name in `sources`.
