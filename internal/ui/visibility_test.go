@@ -201,12 +201,12 @@ func TestNarrowFooterKeepsFocusAndHelpHints(t *testing.T) {
 	m := foldable(t)
 	m.width = 80
 	footer := ansi.Strip(m.footer())
-	if !strings.Contains(footer, "ctrl+j inspector") || !strings.Contains(footer, "? help") {
+	if !strings.Contains(footer, "ctrl+j down") || !strings.Contains(footer, "? help") {
 		t.Fatalf("narrow trace footer = %q", footer)
 	}
 	m.focus = winPane
 	footer = ansi.Strip(m.footer())
-	if !strings.Contains(footer, "ctrl+k trace") || !strings.Contains(footer, "? help") {
+	if !strings.Contains(footer, "ctrl+k up") || !strings.Contains(footer, "? help") {
 		t.Fatalf("narrow inspector footer = %q", footer)
 	}
 	for _, binding := range helpBindings() {
@@ -534,6 +534,45 @@ func TestRollupCountsARequestOnce(t *testing.T) {
 			if got := v.rollup(i); got != want {
 				t.Errorf("%s rollup = %d, want %d", r.label, got, want)
 			}
+		}
+	}
+}
+
+func TestNavigationCrossesAppEdges(t *testing.T) {
+	for _, tc := range []struct {
+		place        placement
+		toward, away string
+	}{
+		{placeBottom, "j", "k"}, {placeTop, "k", "j"},
+		{placeLeft, "h", "l"}, {placeRight, "l", "h"},
+	} {
+		m := foldable(t)
+		m.place = tc.place
+		m.focus = winTree
+		next, cmd := m.navigate(tc.toward)
+		m = next.(Model)
+		if !m.onPane() || cmd != nil {
+			t.Fatalf("dock %v did not enter inspector", tc.place)
+		}
+		_, cmd = m.navigate(tc.toward)
+		if cmd == nil {
+			t.Fatalf("dock %v swallowed outer edge", tc.place)
+		}
+		next, cmd = m.navigate(tc.away)
+		m = next.(Model)
+		if m.onPane() || cmd != nil {
+			t.Fatalf("dock %v did not return to tree", tc.place)
+		}
+		_, cmd = m.navigate(tc.away)
+		if cmd == nil {
+			t.Fatalf("dock %v swallowed tree edge", tc.place)
+		}
+	}
+	m := foldable(t).dock(placeHidden)
+	for _, key := range []string{"h", "j", "k", "l"} {
+		_, cmd := m.navigate(key)
+		if cmd == nil {
+			t.Fatalf("hidden inspector swallowed %s", key)
 		}
 	}
 }

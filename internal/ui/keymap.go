@@ -7,8 +7,9 @@ import (
 )
 
 var keyCatalog = sharedkeymap.Must(
-	sharedkeymap.Binding{ID: "focus-inspector", Keys: []string{"ctrl+j"}, Short: "inspector", Description: "focus the inspector"},
-	sharedkeymap.Binding{ID: "focus-trace", Keys: []string{"ctrl+k"}, Short: "trace", Description: "focus the trace"},
+	sharedkeymap.Binding{ID: "focus-horizontal", Keys: []string{"ctrl+h", "ctrl+l"}, Short: "left/right", Description: "move focus left or right, then into the terminal at the edge"},
+	sharedkeymap.Binding{ID: "focus-down", Keys: []string{"ctrl+j"}, Short: "down", Description: "move focus down, then into the terminal at the edge"},
+	sharedkeymap.Binding{ID: "focus-up", Keys: []string{"ctrl+k"}, Short: "up", Description: "move focus up, then into the terminal at the edge"},
 	sharedkeymap.Binding{ID: "line", Keys: []string{"j", "k", "down", "up"}, Display: "j / k", Short: "line", Description: "one line in the focused pane (the arrows do the same)"},
 	sharedkeymap.Binding{ID: "page", Keys: []string{"ctrl+d", "ctrl+u", "ctrl+f", "ctrl+b"}, Display: "ctrl+d / ctrl+u", Short: "page", Description: "half page the focused pane (ctrl+f and ctrl+b page it whole)"},
 	sharedkeymap.Binding{ID: "inspect-page", Keys: []string{"d", "u"}, Display: "d / u", Short: "inspector", Description: "half page the inspector without moving the focus"},

@@ -3,6 +3,7 @@ package ui
 import (
 	"context"
 	_ "embed"
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"hash/fnv"
@@ -504,6 +505,9 @@ func (m Model) Init() tea.Cmd { return tea.Batch(tick(), m.spin.Tick) }
 
 func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
+	case navError:
+		m.status = "navigation: " + msg.err.Error()
+		return m, nil
 	case tea.WindowSizeMsg:
 		m.width, m.height = msg.Width, msg.Height
 		// Resize has to reclamp. Without it a shrink can leave the offset past
@@ -876,8 +880,8 @@ func (m Model) key(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			m.jump(1)
 		case "[t":
 			m.jump(-1)
-		// ctrl+w is vim's window prefix. w cycles, and h j k l pick a side the
-		// way they pick a split there.
+		case "wh", "wj", "wk", "wl":
+			return m.navigate(k)
 		default:
 			// Any unmatched key cancels the prefix instead of vanishing.
 			m.status = "no binding for " + p + k
@@ -920,13 +924,11 @@ func (m Model) key(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.cmd, m.cmdAt = true, 0
 		return m, nil
 
-	// ctrl+j and ctrl+k move the focus between panes, and every motion below
-	// drives whichever pane holds it. The focused pane wears the accent border,
-	// so no key depends on a state the frame does not show.
-	case "ctrl+j":
-		return m.refocus(winPane), nil
-	case "ctrl+k":
-		return m.refocus(winTree), nil
+	case "ctrl+w":
+		m.pending = "w"
+		return m, nil
+	case "ctrl+h", "ctrl+j", "ctrl+k", "ctrl+l":
+		return m.navigate(strings.TrimPrefix(k, "ctrl+"))
 	case "j", "down":
 		return m.lineBy(1), nil
 	case "k", "up":
@@ -2623,6 +2625,34 @@ func (m Model) refocus(to window) Model {
 	return m
 }
 
+func (m Model) navigate(key string) (tea.Model, tea.Cmd) {
+	if m.visual {
+		return m, nil
+	}
+	toward := map[placement]string{placeBottom: "j", placeTop: "k", placeLeft: "h", placeRight: "l"}[m.placeAt()]
+	opposite := map[string]string{"h": "l", "l": "h", "j": "k", "k": "j"}
+	if !m.onPane() && key == toward {
+		return m.refocus(winPane), nil
+	}
+	if m.onPane() && key == opposite[toward] {
+		return m.refocus(winTree), nil
+	}
+	direction := map[string]string{"h": "left", "j": "down", "k": "up", "l": "right"}[key]
+	if direction == "" {
+		return m, nil
+	}
+	return m, func() tea.Msg {
+		value := direction + ":" + strconv.FormatInt(time.Now().UnixNano(), 10)
+		_, err := fmt.Fprintf(os.Stdout, "\x1b]1337;SetUserVar=SYSINIT_NAV=%s\a", base64.StdEncoding.EncodeToString([]byte(value)))
+		if err != nil {
+			return navError{err}
+		}
+		return nil
+	}
+}
+
+type navError struct{ err error }
+
 func (m Model) onPane() bool {
 	return m.focus == winPane && m.placeAt() != placeHidden
 }
@@ -2936,17 +2966,17 @@ func (m Model) footer() string {
 	}
 	if m.width < 100 {
 		if m.onPane() {
-			return fit(title.Render("inspector")+dim.Render("  "+bindingHints("focus-trace", "help", "line")), m.width)
+			return fit(title.Render("inspector")+dim.Render("  "+bindingHints("focus-up", "help", "line")), m.width)
 		}
-		return fit(title.Render("trace")+dim.Render("  "+bindingHints("focus-inspector", "help", "line")), m.width)
+		return fit(title.Render("trace")+dim.Render("  "+bindingHints("focus-down", "help", "line")), m.width)
 	}
 	if m.onPane() {
 		hint := title.Render("inspector") +
-			dim.Render("   "+bindingHints("line", "page", "ends", "focus-trace", "tab", "help"))
+			dim.Render("   "+bindingHints("line", "page", "ends", "focus-up", "tab", "help"))
 		return fit(hint, m.width)
 	}
 	hint := title.Render("trace") +
-		dim.Render("   "+bindingHints("line", "page", "turn", "visual", "mark-turn", "mark-subtree", "inspect-page", "focus-inspector", "filter", "command", "help"))
+		dim.Render("   "+bindingHints("line", "page", "turn", "visual", "mark-turn", "mark-subtree", "inspect-page", "focus-down", "filter", "command", "help"))
 	return fit(hint, m.width)
 }
 

@@ -1033,6 +1033,8 @@ func run(
 		}
 	}()
 
+	fmt.Fprint(os.Stdout, "\x1b]1337;SetUserVar=SYSINIT_APP=dHJhY2Vz\a")
+	defer fmt.Fprint(os.Stdout, "\x1b]1337;SetUserVar=SYSINIT_APP=\a")
 	_, err := program.Run()
 	close(stop)
 	if err != nil {
